@@ -1,0 +1,31 @@
+# --- Java / Gradle ---
+backend/build/
+backend/.gradle/
+backend/bin/
+!backend/gradle/wrapper/gradle-wrapper.jar
+*.class
+
+# --- Node / Vite ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# --- 환경 (기획서 11.3 Security & Config Isolation) ---
+# .env.development는 VITE_API_BASE만 담고 비밀이 없어 커밋한다.
+# 실제 키가 들어가는 파일은 전부 제외한다.
+.env
+.env.local
+.env.*.local
+frontend/.env.production
+backend/src/main/resources/application-local.yml
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# --- 작업 산출물 ---
+# _workspace/는 커밋한다 — 계약서·결정 기록·QA 리포트가 감사 추적 자산이다 (기획서 11.5 docs/)
+_workspace_*/
