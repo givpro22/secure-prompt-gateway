@@ -6,6 +6,8 @@ import com.skala.gateway.domain.enums.FinalDecision;
 import com.skala.gateway.domain.enums.RuleAction;
 import com.skala.gateway.domain.enums.RuleType;
 import com.skala.gateway.domain.jsonb.RuleResult;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Component;
  * <p>파이프라인 순서가 곧 설계다. 순서를 바꾸면 결과가 달라진다.
  *
  * <pre>
+ * 0. 엠바고 만료   해제일이 지난 규칙 제외          ← 결정 4
  * 1. REGEX 실행    severity 내림차순, 전부 실행 (조기 종료 없음)
  * 2. KEYWORD 실행  매칭 시 규칙당 1건            ← 0.5 D9
  * 3. 중첩 억제     포함 관계 매칭 제거            ← 0.5 D1
@@ -40,13 +43,15 @@ public class RuleEngine {
     private final KeywordMatcher keywordMatcher;
     private final ConflictResolver conflictResolver;
     private final Masker masker;
+    private final Clock clock;
 
     public RuleEngine(RegexMatcher regexMatcher, KeywordMatcher keywordMatcher,
-                      ConflictResolver conflictResolver, Masker masker) {
+                      ConflictResolver conflictResolver, Masker masker, Clock clock) {
         this.regexMatcher = regexMatcher;
         this.keywordMatcher = keywordMatcher;
         this.conflictResolver = conflictResolver;
         this.masker = masker;
+        this.clock = clock;
     }
 
     /**
@@ -55,15 +60,21 @@ public class RuleEngine {
      *                     반환 순서가 곧 7.4의 실행 순서다 (REGEX severity 내림차순 → KEYWORD)
      */
     public EngineVerdict evaluate(String originalText, List<PolicyRule> rules) {
+        // 0. 엠바고 만료 (결정 4). 해제일이 지난 규칙은 매칭시키지 않는다.
+        //    appliedRuleCodes에는 그대로 남긴다 — 로드된 규칙과 매칭된 규칙은 다르며(8.4),
+        //    "적용은 됐는데 이미 풀린 규칙"이 감사 기록에 보이는 편이 사후 소명에 낫다.
+        LocalDate today = LocalDate.now(clock);
+        List<PolicyRule> effective = rules.stream().filter(rule -> !isReleased(rule, today)).toList();
+
         // 1~2. 매칭. BLOCK을 만나도 나머지 규칙을 전부 실행한다 — 감사 기록의 목적이
         //      "무엇이 걸렸는지 전부 남기는 것"이라 일부만 남으면 사후 소명이 불가능해진다.
         List<RuleHit> rawMatches = new ArrayList<>();
-        for (PolicyRule rule : rules) {
+        for (PolicyRule rule : effective) {
             if (rule.getRuleType() == RuleType.REGEX) {
                 rawMatches.addAll(regexMatcher.match(originalText, rule));
             }
         }
-        for (PolicyRule rule : rules) {
+        for (PolicyRule rule : effective) {
             if (rule.getRuleType() == RuleType.KEYWORD) {
                 keywordMatcher.match(originalText, rule).ifPresent(rawMatches::add);
             }
@@ -79,8 +90,9 @@ public class RuleEngine {
         String maskedText = decision == FinalDecision.BLOCK ? null : masker.mask(originalText, findings);
 
         if (log.isDebugEnabled()) {
-            log.debug("판정 {} — 원시 매칭 {}건 → finding {}건 {}",
-                    decision, rawMatches.size(), findings.size(), findings.stream().map(RuleHit::code).toList());
+            log.debug("판정 {} — 기준일 {} · 규칙 {}건 중 만료 {}건 제외 · 원시 매칭 {}건 → finding {}건 {}",
+                    decision, today, rules.size(), rules.size() - effective.size(),
+                    rawMatches.size(), findings.size(), findings.stream().map(RuleHit::code).toList());
         }
 
         return new EngineVerdict(
@@ -91,6 +103,20 @@ public class RuleEngine {
                 maskedText,
                 keywordHits(findings),
                 reviewCategories(findings));
+    }
+
+    /**
+     * 엠바고가 이미 풀렸는가 (결정 4).
+     *
+     * <p>{@code embargoUntil}은 <b>해제일</b>이다. 기준일이 그 날이거나 그 뒤면 공개할 수 있다 —
+     * 경계일 당일은 해제된 쪽이다. 반대로 읽으면 하루 어긋나고, 그 하루가 발표 당일일 수 있다.
+     *
+     * <p>기한이 없는 규칙({@code null})은 절대 풀리지 않는다. 주민번호는 다음 달이 된다고
+     * 덜 민감해지지 않는다.
+     */
+    private static boolean isReleased(PolicyRule rule, LocalDate today) {
+        LocalDate until = rule.getEmbargoUntil();
+        return until != null && !today.isBefore(until);
     }
 
     /**
@@ -108,7 +134,10 @@ public class RuleEngine {
                         hit.matchedKeyword(),
                         hit.severity(),
                         hit.rule().getObligation(),
-                        hit.rule().getSource()))
+                        hit.rule().getSource(),
+                        // 문자열로 넣는다. JSONB 직렬화는 Hibernate가 자체 ObjectMapper로 하므로
+                        // LocalDate를 그대로 두면 JavaTimeModule 등록 여부에 결과가 달라진다.
+                        hit.embargoUntil() == null ? null : hit.embargoUntil().toString()))
                 .toList();
     }
 

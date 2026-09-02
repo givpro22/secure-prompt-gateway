@@ -70,7 +70,9 @@ class DemoCaseApiTest {
                 .contains("SEC-PRIVIP-03", "PII-EMAIL-04");
 
         assertThat(ruleFindingCount(body)).isEqualTo(2);
-        assertThat(policyCodes(body)).containsExactly("P-PII", "P-SEC");
+        // 개발팀에도 P-EMBARGO가 매핑됐다 (결정 2). 스냅샷은 판정 시점의 적용 정책 전부다 —
+        // 이 문장에 엠바고 키워드가 없어 매칭되지 않았을 뿐이다.
+        assertThat(policyCodes(body)).containsExactly("P-PII", "P-SEC", "P-EMBARGO");
     }
 
     @Test
@@ -99,8 +101,8 @@ class DemoCaseApiTest {
         assertThat(span(matches.get(0))).containsExactly(0, 2);
 
         assertThat(ruleFindingCount(body)).isEqualTo(1);
-        // 영업팀은 GLOBAL 2건 + 매핑된 P-CONF까지 3건이다.
-        assertThat(policyCodes(body)).containsExactly("P-PII", "P-SEC", "P-CONF");
+        // 영업팀은 GLOBAL 2건 + 매핑된 P-CONF·P-EMBARGO까지 4건이다.
+        assertThat(policyCodes(body)).containsExactly("P-PII", "P-SEC", "P-CONF", "P-EMBARGO");
     }
 
     @Test

@@ -11,6 +11,9 @@ import com.skala.gateway.domain.enums.Severity;
  *
  * <p><b>{@code pattern}이 없다</b> (계약서 C5). 탐지 정규식이 클라이언트로 나가면 우회 입력을
  * 만들 수 있다. 화면에 필요한 것은 code·description·action·severity·source뿐이다.
+ *
+ * <p>{@code embargoUntil}은 예외적으로 내보낸다. 해제일은 숨길 정보가 아니라 사용자가
+ * "언제 다시 시도하면 되는지" 알기 위해 필요한 정보다. 이유 없는 차단이 우회를 학습시킨다.
  */
 public record PolicyRuleDto(
         Long ruleId,
@@ -21,7 +24,8 @@ public record PolicyRuleDto(
         Severity severity,
         Obligation obligation,
         String source,
-        String description) {
+        String description,
+        String embargoUntil) {
 
     public static PolicyRuleDto from(PolicyRule rule) {
         return new PolicyRuleDto(
@@ -33,6 +37,7 @@ public record PolicyRuleDto(
                 rule.getSeverity(),
                 rule.getObligation(),
                 rule.getSource(),
-                rule.getDescription());
+                rule.getDescription(),
+                rule.getEmbargoUntil() == null ? null : rule.getEmbargoUntil().toString());
     }
 }

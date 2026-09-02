@@ -55,9 +55,11 @@ class RuleEngineDemoCaseTest {
         // BLOCK이면 마스킹을 실행하지 않는다 (D5). 실행했다면 BLOCK 규칙에 mask_label이 없어 NPE다.
         assertThat(verdict.maskedText()).isNull();
         // 억제된 규칙도 appliedRuleCodes에는 남는다 — 적용된 규칙과 매칭된 규칙은 다르다.
+        // 7 → 9. 개발팀에 P-EMBARGO(규칙 2종)가 매핑되면서 로드되는 규칙이 늘었다.
+        // Case A 문장에는 엠바고 키워드가 없으므로 매칭은 그대로 2건이다.
         assertThat(verdict.ruleResult().appliedRuleCodes())
-                .contains("SEC-PRIVIP-03", "PII-EMAIL-04")
-                .hasSize(7);
+                .contains("SEC-PRIVIP-03", "PII-EMAIL-04", "EMB-NOVA-01", "EMB-ATLAS-02")
+                .hasSize(9);
         assertThat(verdict.ruleResult().matches()).hasSize(2);
         // REGEX 매칭 문자열을 JSONB에 남기지 않는다 — 남기면 주민번호 원문이 rule_result에 박힌다.
         assertThat(verdict.ruleResult().matches())

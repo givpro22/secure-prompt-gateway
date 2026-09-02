@@ -5,6 +5,7 @@ import com.skala.gateway.domain.enums.PolicyCategory;
 import com.skala.gateway.domain.enums.RuleAction;
 import com.skala.gateway.domain.enums.RuleType;
 import com.skala.gateway.domain.enums.Severity;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -58,6 +59,16 @@ public record RuleHit(
 
     public PolicyCategory category() {
         return rule.getPolicy().getCategory();
+    }
+
+    /**
+     * 엠바고 해제일. 기한 없는 규칙은 {@code null}이다.
+     *
+     * <p>여기까지 온 매칭은 해제일이 지나지 않은 것뿐이다 — 만료된 규칙은
+     * {@link RuleEngine}이 매칭 전에 걸러낸다.
+     */
+    public LocalDate embargoUntil() {
+        return rule.getEmbargoUntil();
     }
 
     /**

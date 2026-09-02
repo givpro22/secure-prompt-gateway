@@ -42,6 +42,18 @@ ai:
     fail-keyword: ${AI_MOCK_FAIL_KEYWORD:__FAIL__}
 
 gateway:
+  # 입력 규모 상한. 파일 첨부는 프론트에서 텍스트로 추출해 이 경로로 들어오므로(결정 1),
+  # 상한 하나가 손 타이핑과 파일 유입을 모두 덮는다.
+  #
+  # 50,000자는 ConflictResolver.suppressNested가 매칭 개수에 대해 O(n²)인 데서 나온 값이다.
+  # 이 길이면 최악의 경우에도 비교가 천만 번대라 P95 3초 안에 들어온다. 시연 파일(약 17,000자)의
+  # 약 3배이며, 2,600행짜리 아카이브(약 203,000자)는 검사 전에 거절된다.
+  limits:
+    max-input-chars: ${GATEWAY_MAX_INPUT_CHARS:50000}
+  embargo:
+    # 엠바고 만료 판정의 기준일. 비워 두면 실제 오늘이다.
+    # 리허설에서 발표 당일(2026-09-04)을 흉내 낼 때만 채운다 — 운영에서는 반드시 비워 둔다.
+    reference-date: ${GATEWAY_EMBARGO_REFERENCE_DATE:}
   polling:
     interval-ms: ${GATEWAY_POLL_INTERVAL_MS:2000}   # 202 응답의 pollAfterMs
     max-attempts: ${GATEWAY_POLL_MAX_ATTEMPTS:30}   # FE 폴링 상한

@@ -31,6 +31,12 @@ public record RuleResult(List<RuleMatch> matches, List<String> appliedRuleCodes)
      * @param severity       HIGH / MEDIUM / LOW
      * @param obligation     LEGAL / INTERNAL
      * @param source         법령 조문 또는 사규 항목
+     * @param embargoUntil   엠바고 <b>해제일</b>({@code yyyy-MM-dd}). 이 날부터 공개할 수 있다.
+     *                       엠바고 규칙이 아니면 {@code null}이다.
+     *                       <p>{@link java.time.LocalDate}가 아니라 문자열인 이유는 이 record가
+     *                       JSONB로 저장되기 때문이다. Hibernate는 자체 ObjectMapper로 직렬화하므로
+     *                       JavaTimeModule 등록 여부에 따라 {@code "2026-09-20"}이 되기도
+     *                       {@code [2026,9,20]}이 되기도 한다. 화면 계약이 그것에 흔들려서는 안 된다
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RuleMatch(
@@ -41,6 +47,7 @@ public record RuleResult(List<RuleMatch> matches, List<String> appliedRuleCodes)
             String matchedKeyword,
             Severity severity,
             Obligation obligation,
-            String source) {
+            String source,
+            String embargoUntil) {
     }
 }

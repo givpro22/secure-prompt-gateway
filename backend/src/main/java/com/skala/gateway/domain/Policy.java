@@ -9,6 +9,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
@@ -52,6 +54,17 @@ public class Policy {
     @Column(name = "scope", nullable = false, length = 20)
     private PolicyScope scope;
 
+    /**
+     * 정책을 <b>만든</b> 부서. {@code department_policy}(적용되는 부서)와 다른 개념이다.
+     *
+     * <p>엠바고는 홍보팀이 걸고 개발팀·영업팀이 걸린다. 두 방향을 한 매핑으로 표현하면
+     * "누가 정한 규칙인가"에 답할 수 없다. 부서 마스터는 5행뿐이라 EAGER로 둔다 —
+     * 화면이 소유 부서명을 항상 함께 쓰므로 지연 로딩의 이득이 없다.
+     */
+    @ManyToOne
+    @JoinColumn(name = "owner_dept_id")
+    private Department ownerDept;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -94,6 +107,10 @@ public class Policy {
 
     public PolicyScope getScope() {
         return scope;
+    }
+
+    public Department getOwnerDept() {
+        return ownerDept;
     }
 
     public OffsetDateTime getCreatedAt() {

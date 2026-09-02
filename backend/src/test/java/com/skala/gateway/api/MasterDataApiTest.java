@@ -34,12 +34,13 @@ class MasterDataApiTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("GET /departments — 봉투로 4행. INFOSEC도 포함한다 (드롭다운에 필요)")
+    @DisplayName("GET /departments — 봉투로 5행. INFOSEC·PR도 포함한다 (드롭다운에 필요)")
     void departments() throws Exception {
         JsonNode body = getJson("/api/v1/departments", 200);
 
-        assertEnvelope(body, 4);
-        assertThat(codes(body.path("items"), "code")).containsExactly("DEV", "SALES", "HR", "INFOSEC");
+        assertEnvelope(body, 5);
+        assertThat(codes(body.path("items"), "code"))
+                .containsExactly("DEV", "SALES", "HR", "INFOSEC", "PR");
     }
 
     @Test
@@ -47,7 +48,7 @@ class MasterDataApiTest {
     void users() throws Exception {
         JsonNode body = getJson("/api/v1/users", 200);
 
-        assertEnvelope(body, 4);
+        assertEnvelope(body, 5);
         JsonNode first = body.path("items").get(0);
         assertThat(first.path("name").asText()).isEqualTo("이OO");
         assertThat(first.path("role").asText()).isEqualTo("EMPLOYEE");
@@ -64,24 +65,28 @@ class MasterDataApiTest {
     }
 
     @Test
-    @DisplayName("GET /policies?deptId=1 — 개발팀은 GLOBAL 2건. P-CONF는 매핑이 없다")
+    @DisplayName("GET /policies?deptId=1 — 개발팀은 GLOBAL 2건 + P-EMBARGO. P-CONF는 매핑이 없다")
     void policiesForDev() throws Exception {
         JsonNode body = getJson("/api/v1/policies?deptId=" + DemoCases.DEPT_DEV, 200);
 
-        assertEnvelope(body, 2);
-        assertThat(codes(body.path("items"), "code")).containsExactly("P-PII", "P-SEC");
-        assertThat(codes(body.path("items"), "appliedVia")).containsExactly("GLOBAL", "GLOBAL");
+        assertEnvelope(body, 3);
+        assertThat(codes(body.path("items"), "code")).containsExactly("P-PII", "P-SEC", "P-EMBARGO");
+        assertThat(codes(body.path("items"), "appliedVia")).containsExactly("GLOBAL", "GLOBAL", "DEPT");
+        // 엠바고를 건 주체가 화면에 드러나야 차단이 납득된다 (결정 3).
+        assertThat(codes(body.path("items"), "ownerDept"))
+                .containsExactly("정보보안팀", "정보보안팀", "홍보팀");
         // 탐지 정규식은 응답에 넣지 않는다 (계약서 C5). 나가면 우회 입력을 만들 수 있다.
         assertThat(body.toString()).doesNotContain("pattern");
     }
 
     @Test
-    @DisplayName("GET /policies?deptId=2 — 영업팀은 GLOBAL 2건 + 매핑 1건")
+    @DisplayName("GET /policies?deptId=2 — 영업팀은 GLOBAL 2건 + 매핑 2건")
     void policiesForSales() throws Exception {
         JsonNode body = getJson("/api/v1/policies?deptId=" + DemoCases.DEPT_SALES, 200);
 
-        assertEnvelope(body, 3);
-        assertThat(codes(body.path("items"), "appliedVia")).containsExactly("GLOBAL", "GLOBAL", "DEPT");
+        assertEnvelope(body, 4);
+        assertThat(codes(body.path("items"), "appliedVia"))
+                .containsExactly("GLOBAL", "GLOBAL", "DEPT", "DEPT");
         JsonNode conf = body.path("items").get(2);
         assertThat(conf.path("code").asText()).isEqualTo("P-CONF");
         assertThat(conf.path("rules").get(0).path("code").asText()).isEqualTo("CONF-CLIENT-01");
