@@ -1,5 +1,7 @@
 # 사내 생성형 AI 게이트웨이
 
+**배포 주소 — http://15.164.215.132/chat** ([감사 콘솔](http://15.164.215.132/admin/audit) · [Swagger UI](http://15.164.215.132/swagger-ui/index.html))
+
 사내 구성원이 생성형 AI에 보내는 프롬프트를 **전송 전에** 검사해 개인정보·자격증명·기밀 정보 유출을 막는 게이트웨이입니다.
 
 핵심 설계는 책임 경계입니다. **규칙 엔진은 결정하고(허용/마스킹/차단), AI는 제안만 합니다.** AI가 제시한 후보는 보안 담당자가 감사 콘솔에서 확정하기 전까지 어떤 판정도 되지 않습니다. 이 경계는 화면에서도, 스키마에서도 강제됩니다 — `aiAssessment`에는 `decision`·`block`·`allow`·`confidence` 필드가 아예 없습니다.
@@ -73,6 +75,34 @@ npm run dev:fixtures
 
 Vite dev 서버가 `/api/v1`을 직접 응답하는 개발 전용 픽스처 서버(`frontend/dev/fixture-server.js`)를 켭니다. 판정 규칙 8종·중첩 억제·2.5초 AI 지연까지 실제 계약대로 흉내 내므로 아래 데모 케이스 4종이 그대로 동작합니다. 이 서버는 프로덕션 번들에 포함되지 않습니다.
 
+## 배포
+
+AWS EC2(ap-northeast-2, t3.micro) 한 대에 Docker Compose로 올립니다. 컨테이너는 3개(`db` · `backend` · `frontend`)이고, 외부에 여는 포트는 **80뿐**입니다 — PostgreSQL과 백엔드는 컴포즈 내부 네트워크에만 있습니다.
+
+| 대상 | 주소 |
+|---|---|
+| SCR-01 직원 AI 챗 | http://15.164.215.132/chat |
+| SCR-02 관리자 감사 콘솔 | http://15.164.215.132/admin/audit |
+| Swagger UI | http://15.164.215.132/swagger-ui/index.html |
+| API base | http://15.164.215.132/api/v1 |
+
+```bash
+git clone https://github.com/givpro22/secure-prompt-gateway.git
+cd secure-prompt-gateway
+cp .env.example .env        # DB_PASSWORD만 바꾸면 됩니다
+docker compose up -d --build
+docker compose logs -f backend      # "Started GatewayApplication"
+```
+
+재배포는 `git pull && docker compose up -d --build`입니다. DB는 `db-data` 볼륨에 남으므로 판정 이력이 유지됩니다. 초기 시드 상태로 되돌리려면 `docker compose down -v`로 볼륨을 비웁니다.
+
+### 구성 메모
+
+- **프론트 번들에 API 주소를 굽지 않습니다.** nginx가 같은 오리진에서 `/api/v1`을 백엔드로 프록시하므로 이미지 빌드 시 `VITE_API_BASE=/api/v1`이 들어갑니다 (`docker-compose.yml`의 build args). IP나 도메인이 바뀌어도 프론트를 다시 빌드할 필요가 없고, 브라우저가 CORS를 타지 않습니다.
+- **nginx는 백엔드가 죽어 있어도 기동합니다.** `proxy_pass`에 호스트명을 직접 쓰면 nginx가 기동 시점에 이름을 풀고 실패해 화면 자체가 뜨지 않습니다. resolver와 변수를 써서 요청 시점에 풀게 했으므로 그 경우 502만 반환합니다.
+- **메모리 상한을 명시했습니다.** t3.micro는 1GiB뿐이라 JVM 기본 힙(물리 메모리의 1/4)에 맡기면 빌드·기동 중 OOM이 납니다. Gradle은 `--no-daemon -Xmx512m`, 애플리케이션은 `-Xmx384m`로 묶었고, 인스턴스에 스왑 2GB를 잡아두었습니다.
+- **보안 그룹은 22(SSH, 내 IP)와 80(HTTP, 전체)만 엽니다.** 80이 닫혀 있으면 컨테이너가 정상이어도 브라우저에서 접속되지 않습니다 — 서버에서 `curl -I http://localhost/chat`이 200이면 원인은 보안 그룹입니다.
+
 ## 환경변수
 
 코드에는 키·엔드포인트·모델명·임계값이 없습니다. 정책과 규칙은 DB에, 나머지는 환경변수에 있습니다.
@@ -111,6 +141,7 @@ Vite 규칙상 `VITE_` 접두사가 붙은 값만 클라이언트에 노출됩�
 | `VITE_API_BASE` | `.env.development` | `http://localhost:8080/api/v1` | `npm run dev`가 쓰는 값. 코드에 URL을 하드코딩하지 않으므로 이 한 줄로 Postman Mock ↔ 로컬 BE ↔ 배포 환경을 전환합니다 |
 | `VITE_API_BASE` | `.env.production` | `http://localhost:8080/api/v1` | `npm run build` / `npm run preview`가 쓰는 값. 실제 배포 시에는 빌드 시점에 주입해 덮어씁니다 |
 | `VITE_API_BASE` | `.env.fixtures` | `/api/v1` | 픽스처 모드 (`npm run dev:fixtures`) |
+| `VITE_API_BASE` | (빌드 ARG) | `/api/v1` | 컨테이너 빌드가 쓰는 값. `frontend/Dockerfile`의 `ARG VITE_API_BASE`로 주입되어 `.env.production`보다 우선합니다 |
 | `VITE_FIXTURES` | `.env.fixtures` | `1` | 픽스처 서버 활성화. 이 값이 `1`일 때만 플러그인이 등록됩니다 |
 
 ## 데모 케이스
