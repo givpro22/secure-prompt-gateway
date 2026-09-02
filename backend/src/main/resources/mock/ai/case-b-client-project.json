@@ -1,0 +1,19 @@
+{
+  "riskCandidates": [
+    {
+      "code": "CONF-CLIENT-PROJECT",
+      "category": "CONFIDENTIAL",
+      "rationale": "'A사 차세대 프로젝트 오픈 일정'이라는 서술이 계약 상대방과 미공개 일정을 동시에 특정함",
+      "evidence": [
+        {
+          "source": "고객사 NDA 목록 v3",
+          "excerpt": "A사 — 비밀유지 2027.03까지, 일정·범위 포함"
+        }
+      ]
+    }
+  ],
+  "missingContext": [
+    "해당 일정이 대외 공개된 정보인지 확인 필요"
+  ],
+  "reviewRequired": true
+}
