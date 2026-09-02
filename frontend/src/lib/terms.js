@@ -40,7 +40,16 @@ export const AI_STATUS_TERMS = {
 
 export const ACTION_TERMS = { MASK: '마스킹', BLOCK: '차단', REVIEW: '검토' }
 export const OBLIGATION_TERMS = { LEGAL: '법령', INTERNAL: '사규' }
-export const CATEGORY_TERMS = { PII: '개인정보', SECRET: '자격증명', CONFIDENTIAL: '기밀' }
+/*
+ * EMBARGO는 '기밀'과 다르다. 기밀은 정보가 민감해서 막고, 엠바고는 아직 때가 아니라서 막는다.
+ * 같은 문장이 해제일 다음 날에는 그냥 통과하므로 라벨도 갈라 둔다.
+ */
+export const CATEGORY_TERMS = {
+  PII: '개인정보',
+  SECRET: '자격증명',
+  CONFIDENTIAL: '기밀',
+  EMBARGO: '엠바고',
+}
 export const SEVERITY_TERMS = { HIGH: '높음', MEDIUM: '보통', LOW: '낮음' }
 export const DECIDED_BY_TERMS = { RULE: '규칙', HUMAN: '담당자' }
 export const SCOPE_TERMS = { GLOBAL: '전사', DEPT: '부서' }

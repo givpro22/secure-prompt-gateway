@@ -25,6 +25,27 @@ public final class DemoCases {
     /** Case D — 정OO (인사팀, userId 3). MASK · finding 1건 · 200 */
     public static final String CASE_D = "지원자 연락처 010-1234-5678 로 면접 안내 문자 초안 써줘";
 
+    /**
+     * Case E — 이OO (개발팀, userId 1). 엠바고 차단 · 403.
+     *
+     * <p>개발팀이 4분기 릴리스 백로그 엑셀을 넣은 것이다. 프론트가 추출한 텍스트가
+     * {@code [시트!N행] 셀 | 셀} 형태라 원문 오프셋 기반 마스킹이 그대로 동작하고,
+     * 차단 사유에 위치가 함께 남는다 (docs/demo-files/make_demo_xlsx.py).
+     *
+     * <p>유출 의도도 개인정보도 없다. 그런데 외부 LLM에 넣는 순간 그것은 공개다.
+     */
+    public static final String CASE_E =
+            "[백로그!2행] REL-0001 | SKALA NOVA | NOVA 추천 위젯 A/B 테스트 | 김OO | 리뷰 | S-23 | 런칭 2주 전 지표 확정";
+
+    /**
+     * Case E-2 — 같은 파일의 다른 행. 엠바고가 이미 풀린 제품이라 걸리지 않는다.
+     *
+     * <p>E와 E-2가 같은 형태의 규칙에 같은 방식으로 걸리는데 결과가 갈린다. 부서로 갈리는
+     * Case B/C와 같은 증명을 시간 축에서 한 번 더 하는 자리다.
+     */
+    public static final String CASE_E_RELEASED =
+            "[백로그!3행] REL-0002 | SKALA ATLAS | 아틀라스 대시보드 위젯 추가 | 정OO | 완료 | S-24 | 정식 출시 후 개선건";
+
     public static final long USER_DEV = 1L;
     public static final long USER_SALES = 2L;
     public static final long USER_HR = 3L;
@@ -32,6 +53,10 @@ public final class DemoCases {
     public static final long DEPT_DEV = 1L;
     public static final long DEPT_SALES = 2L;
     public static final long DEPT_HR = 3L;
+    public static final long DEPT_PR = 5L;
+
+    /** 발표 당일. 엠바고 규칙 2종의 해제일(09-20 / 09-04) 사이에 있어 하나만 걸린다. */
+    public static final String DEMO_REFERENCE_DATE = "2026-09-04";
 
     private DemoCases() {
     }

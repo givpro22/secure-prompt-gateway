@@ -7,6 +7,7 @@ import com.skala.gateway.config.CurrentUserId;
 import com.skala.gateway.domain.repository.AppUserRepository;
 import com.skala.gateway.service.InspectionService;
 import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,9 +34,21 @@ public class MessageController {
     private final InspectionService inspectionService;
     private final AppUserRepository appUserRepository;
 
-    public MessageController(InspectionService inspectionService, AppUserRepository appUserRepository) {
+    /**
+     * 검사 대상 텍스트의 최대 길이 ({@code gateway.limits.max-input-chars}).
+     *
+     * <p>파일은 프론트에서 텍스트로 추출해 이 엔드포인트로 들어온다(결정 1). 상한이 없으면
+     * 2,600행짜리 백로그가 20만 자로 그대로 들어오고, {@code ConflictResolver}의 중첩 억제가
+     * 매칭 개수에 대해 O(n²)이라 요청 하나가 스레드를 오래 잡는다. 검사에 3초가 넘게 걸리면
+     * 사용자는 게이트웨이를 우회할 길을 찾는다 — 그때 통제율은 0이 된다.
+     */
+    private final int maxInputChars;
+
+    public MessageController(InspectionService inspectionService, AppUserRepository appUserRepository,
+                             @Value("${gateway.limits.max-input-chars}") int maxInputChars) {
         this.inspectionService = inspectionService;
         this.appUserRepository = appUserRepository;
+        this.maxInputChars = maxInputChars;
     }
 
     @PostMapping("/messages")
@@ -43,6 +56,13 @@ public class MessageController {
         if (request == null || request.isBlank()) {
             return ResponseEntity.badRequest()
                     .body(ErrorResponse.invalidRequest("text는 비어 있을 수 없습니다."));
+        }
+        // 잘라서 통과시키지 않는다. 뒷부분을 버리고 검사하면 "검사했다"는 기록만 남고
+        // 실제로는 안 본 구간이 생긴다 — 감사 기록 자체가 거짓이 된다.
+        if (request.text().length() > maxInputChars) {
+            return ResponseEntity.badRequest().body(ErrorResponse.invalidRequest(
+                    "text가 최대 길이를 초과했습니다. (%,d자 / 최대 %,d자) 내용을 나눠서 보내십시오."
+                            .formatted(request.text().length(), maxInputChars)));
         }
         // 401이 아니라 400이다. 401은 인증 체계가 있다는 뜻인데 이번 범위에 인증이 없다
         // (0.3, 계약서 C8).

@@ -15,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 
 /**
  * 규칙 (기획서 6.2, 7.2).
@@ -72,6 +73,16 @@ public class PolicyRule {
     @Column(name = "description", length = 200)
     private String description;
 
+    /**
+     * 엠바고 해제일. <b>이 날부터 공개할 수 있다</b> — 차단 조건은 {@code today < embargoUntil}이며
+     * 경계일 당일에는 이미 풀린 것이다. "○○일까지 불가"로 읽으면 하루가 어긋난다.
+     *
+     * <p>{@code null}이면 기한 없는 규칙이다. 기존 8종이 전부 여기 해당한다 — 주민번호는
+     * 다음 달이 된다고 덜 민감해지지 않는다.
+     */
+    @Column(name = "embargo_until")
+    private LocalDate embargoUntil;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = Boolean.TRUE;
 
@@ -120,6 +131,10 @@ public class PolicyRule {
 
     public String getDescription() {
         return description;
+    }
+
+    public LocalDate getEmbargoUntil() {
+        return embargoUntil;
     }
 
     public Boolean getIsActive() {

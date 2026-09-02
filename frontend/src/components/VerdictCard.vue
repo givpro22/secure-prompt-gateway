@@ -33,6 +33,16 @@ const policies = computed(() => {
   return snapshot.policies ?? []
 })
 
+/*
+ * 엠바고로 막힌 매칭. 해제일이 있으면 "언제 다시 시도하면 되는지"를 알려줘야 한다 —
+ * 이유 없는 차단은 사용자가 우회를 학습하게 만들고, 그게 이 시스템의 최대 실패 모드다.
+ * 규칙이 여러 건이면 가장 늦게 풀리는 날이 실질적인 재시도 시점이다.
+ */
+const embargoUntil = computed(() => {
+  const dates = matches.value.map((m) => m.embargoUntil).filter(Boolean)
+  return dates.length === 0 ? null : dates.slice().sort().at(-1)
+})
+
 const isAllow = computed(() => props.verdict.decision === 'ALLOW')
 const isBlock = computed(() => props.verdict.decision === 'BLOCK')
 const isMask = computed(() => props.verdict.decision === 'MASK')
@@ -70,13 +80,18 @@ const summary = computed(() => {
           {{ term(ACTION_TERMS, match.action) }}
         </span>
         <span v-if="match.matchedKeyword" class="keyword">‘{{ match.matchedKeyword }}’</span>
+        <span v-if="match.embargoUntil" class="until">{{ match.embargoUntil }} 해제</span>
         <span class="spacer" />
         <span class="obligation">{{ term(OBLIGATION_TERMS, match.obligation) }}</span>
         <span class="source">{{ match.source }}</span>
       </li>
     </ul>
 
-    <p v-if="isBlock" class="hint">
+    <p v-if="isBlock && embargoUntil" class="hint embargo">
+      <strong>{{ embargoUntil }}</strong>부터 공개할 수 있는 내용입니다. 그때까지는 외부 AI로 보낼 수 없습니다.
+      해당 표현을 빼고 다시 전송하세요. 입력창에 방금 입력한 내용이 그대로 남아 있습니다.
+    </p>
+    <p v-else-if="isBlock" class="hint">
       차단된 항목을 제거하거나 대체한 뒤 다시 전송하세요. 입력창에 방금 입력한 내용이 그대로 남아 있습니다.
     </p>
     <p v-if="isMask" class="hint">
@@ -182,6 +197,18 @@ const summary = computed(() => {
 
 .keyword {
   color: var(--purple);
+}
+
+.until {
+  padding: 1px 6px;
+  border: 1px solid var(--navy);
+  border-radius: 3px;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.hint.embargo strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .spacer {

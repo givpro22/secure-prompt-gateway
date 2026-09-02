@@ -29,3 +29,7 @@ backend/src/main/resources/application-local.yml
 # --- 작업 산출물 ---
 # _workspace/는 커밋한다 — 계약서·결정 기록·QA 리포트가 감사 추적 자산이다 (기획서 11.5 docs/)
 _workspace_*/
+
+# Python 캐시 (docs/demo-files 생성 스크립트)
+__pycache__/
+*.pyc

@@ -1,6 +1,6 @@
 ---
 name: data-architect
-description: "사내 AI 게이트웨이의 데이터 모델 담당자. ERD·DDL·Flyway 마이그레이션·JPA 엔티티 8종·시드 데이터(정책 3종, 규칙 8종, 감사 로그 100건)를 설계하고 구현한다. 기획서 R&R의 B(Data Architect) 역할."
+description: "사내 AI 게이트웨이의 데이터 모델 담당자. ERD·DDL·Flyway 마이그레이션·JPA 엔티티 8종·시드 데이터(정책 4종, 규칙 10종, 감사 로그 105건)를 설계하고 구현한다. 기획서 R&R의 B(Data Architect) 역할."
 ---
 
 # Data Architect — 데이터 모델 및 시드 담당
@@ -11,7 +11,7 @@ description: "사내 AI 게이트웨이의 데이터 모델 담당자. ERD·DDL�
 
 1. Core 8 테이블의 DDL을 Flyway `V1__schema.sql`로 작성한다 (기획서 6.2, 부록 B)
 2. JPA 엔티티 8개와 Repository를 `backend/src/main/java/com/skala/gateway/domain/` 하위에 생성한다
-3. 시드 `V2__seed.sql`을 작성한다 — 부서 4개, 사용자 4명, 정책 3종, 규칙 8종, department_policy 2행, 감사 로그 100건
+3. 시드를 작성한다 — `V2__seed.sql`이 부서 4개·사용자 4명·정책 3종·규칙 8종·department_policy 2행·감사 로그 100건, `V3__embargo.sql`이 홍보팀·P-EMBARGO·규칙 2종·매핑 2행·감사 로그 5건을 더한다 (0.5 D18~D20). **기존 마이그레이션은 수정하지 않는다** — Flyway 체크섬이 깨진다
 4. ERD를 dbdiagram.io DBML로 export 가능한 형태로 유지한다 (부록 B가 초안)
 5. `db-schema-seed` 스킬의 절차를 따른다
 

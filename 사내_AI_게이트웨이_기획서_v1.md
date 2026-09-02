@@ -116,6 +116,19 @@ AI를 개발하지 않습니다. 가이드 2일차 항목에 "AI 서비스는 Mo
 
 D1과 D5는 뿌리가 같습니다. Case A 입력의 `postgres://admin:p%40ss@10.0.3.21/prod`에서 SEC-DBURL-02의 패턴(`[^\s]+`)이 공백 전까지 통째로 매칭하므로 사설 IP `10.0.3.21`을 잡는 SEC-PRIVIP-03의 구간이 그 안에 완전히 포함됩니다. 중첩을 억제하면 건수 문제와 라벨 충돌 문제가 함께 해소됩니다.
 
+#### 0.5.1 엠바고 정책 추가에 따른 결정 (2026-09-02)
+
+기존 3종 정책은 **정보가 민감해서** 통제합니다. 엠바고는 **아직 때가 아니라서** 통제하며, 같은 문장이 해제일 다음 날에는 그냥 통과합니다. 이 성질의 차이가 아래 네 결정을 낳았습니다.
+
+| ID | 항목 | 결정 | 근거 | 반영 위치 |
+|---|---|---|---|---|
+| D17 | 파일(엑셀) 입력 경로 — 0.3이 첨부파일과 첨부 업로드 API를 범위 밖으로 명시함 | **프론트엔드에서 텍스트로 추출해 기존 `POST /messages` 경로로 전송한다.** 백엔드·엔진 무변경 | 시연이 보여줄 장면("엑셀을 넣었더니 차단됨")은 이 방식으로 동일하고, 검사 대상은 여전히 입력 프롬프트라 0.3을 위반하지 않는다. 17장 확장 4번("추출기만 추가, 엔진 무변경")이 그대로 성립한다. 다만 **파일 형식 검증은 방어가 아니라 사용자 안내**다 — 파일이 프론트에서만 열리므로 그렇게 설명해야 한다 | 0.3, 17 |
+| D18 | 홍보팀 부서 신설 | **`PR / 홍보팀` 추가.** 사용자 1명(한OO)과 감사 로그 5건을 함께 시드한다 | `department.code`에 CHECK 제약이 없어 INSERT만으로 추가된다. 로그를 함께 넣는 이유는 감사 콘솔 부서 필터에서 홍보팀을 골랐을 때 0건이 나오는 자리가 시연 중에 눌릴 수 있기 때문이다 | 6.2, 7.3, 10.2 |
+| D19 | "홍보팀이 만든 정책"의 표현 — `department_policy`는 적용 부서이지 소유 부서가 아님 | **`policy.owner_dept_id` 컬럼을 신설한다** | 엠바고는 홍보팀이 걸고 개발팀·영업팀이 걸린다. 두 방향을 한 매핑으로 표현하면 "누가 정한 규칙인가"에 답할 수 없고, 그 답이 없으면 차단이 납득되지 않는다 | 6.2, 7.1, 8.4 |
+| D20 | 엠바고 해제일의 저장 위치와 경계 | **`policy_rule.embargo_until DATE` 신설. 의미는 해제일이며 차단 조건은 `today < embargo_until`이다** (경계일 당일은 이미 풀린 것). 만료된 규칙은 매칭시키지 않되 `appliedRuleCodes`에는 남긴다 | 날짜를 코드나 화면에 하드코딩하면 "정책·규칙·임계값은 DB"라는 11.3 주장이 무너진다. "○○일까지 불가"로 읽으면 하루가 어긋나고 그 하루가 발표 당일일 수 있어 부등호를 문서에 고정한다. 만료 규칙을 `appliedRuleCodes`에 남기는 것은 D1 중첩 억제와 같은 논리다 — 적용된 규칙과 매칭된 규칙은 다르다 | 6.2, 7.2, 7.4, 8.4 |
+
+D20의 판정 기준일은 `gateway.embargo.reference-date`로 덮어쓸 수 있습니다. 비워 두면 실제 오늘이며, 발표 전 리허설에서 발표 당일을 흉내 낼 때만 채웁니다 (11.3).
+
 ---
 
 ## 1. 가이드라인 필수 요소 체크리스트
@@ -550,8 +563,8 @@ Core Domain 8개는 DDL을 실행하고, Future Domain 4개는 Logical Model에�
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | dept_id | BIGSERIAL | PK | |
-| code | VARCHAR(20) | UNIQUE, NOT NULL | DEV, SALES, HR, INFOSEC |
-| name | VARCHAR(50) | NOT NULL | 개발팀, 영업팀, 인사팀, 정보보안팀 |
+| code | VARCHAR(20) | UNIQUE, NOT NULL | DEV, SALES, HR, INFOSEC, PR |
+| name | VARCHAR(50) | NOT NULL | 개발팀, 영업팀, 인사팀, 정보보안팀, 홍보팀 |
 
 `app_user`
 
@@ -569,12 +582,13 @@ Core Domain 8개는 DDL을 실행하고, Future Domain 4개는 Logical Model에�
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | policy_id | BIGSERIAL | PK | |
-| code | VARCHAR(20) | UNIQUE | P-PII, P-SEC, P-CONF |
+| code | VARCHAR(20) | UNIQUE | P-PII, P-SEC, P-CONF, P-EMBARGO |
 | name | VARCHAR(100) | NOT NULL | |
-| category | VARCHAR(20) | NOT NULL | PII, SECRET, CONFIDENTIAL |
+| category | VARCHAR(20) | NOT NULL | PII, SECRET, CONFIDENTIAL, EMBARGO |
 | version | INT | NOT NULL, DEFAULT 1 | 규칙 변경 시 증가 |
 | is_active | BOOLEAN | DEFAULT true | |
 | scope | VARCHAR(20) | NOT NULL | GLOBAL(전사) 또는 DEPT(매핑 필요) |
+| owner_dept_id | BIGINT | FK → department | 정책을 **만든** 부서. `department_policy`(적용 부서)와 다르다 (0.5 D19) |
 | created_at | TIMESTAMPTZ | | |
 
 `policy_rule`
@@ -592,6 +606,7 @@ Core Domain 8개는 DDL을 실행하고, Future Domain 4개는 Logical Model에�
 | obligation | VARCHAR(20) | NOT NULL | LEGAL(법령), INTERNAL(사규) |
 | source | VARCHAR(100) | | 개인정보보호법 제N조, 정보보안규정 N.N 등 |
 | description | VARCHAR(200) | | 화면 표시용 설명 |
+| embargo_until | DATE | | 엠바고 **해제일**. 이 날부터 공개 가능하며 차단 조건은 `today < embargo_until`. NULL이면 기한 없음 (0.5 D20) |
 | is_active | BOOLEAN | DEFAULT true | |
 
 `department_policy` — N:M
@@ -689,47 +704,64 @@ scope=GLOBAL 정책은 매핑 없이 전 부서에 적용됩니다. scope=DEPT �
 
 ## 7. 정책 및 규칙 정의
 
-### 7.1 정책 3종
+### 7.1 정책 4종
 
-| 코드 | 이름 | 카테고리 | scope | 적용 부서 | 규칙 수 |
-|---|---|---|---|---|---|
-| P-PII | 개인정보 보호 | PII | GLOBAL | 전사 | 4 |
-| P-SEC | 자격증명·인프라 정보 보호 | SECRET | GLOBAL | 전사 | 3 |
-| P-CONF | 고객사 프로젝트 정보 통제 | CONFIDENTIAL | DEPT | 영업팀, 인사팀 | 1 |
+| 코드 | 이름 | 카테고리 | scope | 소유 부서 | 적용 부서 | 규칙 수 |
+|---|---|---|---|---|---|---|
+| P-PII | 개인정보 보호 | PII | GLOBAL | 정보보안팀 | 전사 | 4 |
+| P-SEC | 자격증명·인프라 정보 보호 | SECRET | GLOBAL | 정보보안팀 | 전사 | 3 |
+| P-CONF | 고객사 프로젝트 정보 통제 | CONFIDENTIAL | DEPT | 정보보안팀 | 영업팀, 인사팀 | 1 |
+| P-EMBARGO | 보도자료 엠바고 | EMBARGO | DEPT | **홍보팀** | 개발팀, 영업팀 | 2 |
 
 P-CONF가 개발팀에 적용되지 않는 이유는 개발팀이 해당 고객사 프로젝트의 수행 조직이라 업무상 논의가 필요하기 때문입니다. 이 차이가 데모 Case B/C의 근거입니다.
 
-### 7.2 규칙 8종
+P-EMBARGO는 **소유 부서와 적용 부서가 다른 유일한 정책**입니다 (0.5 D19). 홍보팀이 발표 시점을 통제하고, 그 통제를 받는 쪽은 미발표 제품을 다루는 개발팀·영업팀입니다. 홍보팀 자신에게는 매핑하지 않습니다 — 발표 주체가 자기 엠바고에 걸릴 이유가 없습니다.
 
-| 코드 | 정책 | 타입 | 패턴 | 액션 | 마스킹 라벨 | 심각도 | 의무 | 출처 |
-|---|---|---|---|---|---|---|---|---|
-| PII-RRN-01 | P-PII | REGEX | `\d{6}-?[1-4]\d{6}` | MASK | [주민번호] | HIGH | LEGAL | 개인정보보호법 제24조 |
-| PII-CARD-02 | P-PII | REGEX | `\b(\d{4}-?){3}\d{4}\b` | MASK | [카드번호] | HIGH | LEGAL | 개인정보보호법 |
-| PII-PHONE-03 | P-PII | REGEX | `01[016789]-?\d{3,4}-?\d{4}` | MASK | [전화번호] | MEDIUM | LEGAL | 개인정보보호법 |
-| PII-EMAIL-04 | P-PII | REGEX | `[\w.+-]+@[\w-]+\.[\w.]+` | MASK | [이메일] | LOW | LEGAL | 개인정보보호법 |
-| SEC-AWSKEY-01 | P-SEC | REGEX | `AKIA[0-9A-Z]{16}` | BLOCK | — | HIGH | INTERNAL | 정보보안규정 4.2 |
-| SEC-DBURL-02 | P-SEC | REGEX | `(postgres\|mysql\|jdbc)[\w+]*://[^\s]+` | BLOCK | — | HIGH | INTERNAL | 정보보안규정 4.2 |
-| SEC-PRIVIP-03 | P-SEC | REGEX | `\b(10\.\d{1,3}\|192\.168\|172\.(1[6-9]\|2\d\|3[01]))\.\d{1,3}\.\d{1,3}\b` | MASK | [내부IP] | MEDIUM | INTERNAL | 정보보안규정 4.3 |
-| CONF-CLIENT-01 | P-CONF | KEYWORD | `A사,B사,C사,프로젝트 오메가,차세대` | REVIEW | — | MEDIUM | INTERNAL | 고객사 NDA 목록 v3 |
+카테고리를 `CONFIDENTIAL`에 얹지 않고 `EMBARGO`로 나눈 이유는 통제의 근거가 다르기 때문입니다. 기밀은 정보가 민감해서 막지만 엠바고는 아직 때가 아니라서 막으며, 화면에 "기밀"로 뜨면 그 구분이 사라집니다.
+
+### 7.2 규칙 10종
+
+| 코드 | 정책 | 타입 | 패턴 | 액션 | 마스킹 라벨 | 심각도 | 의무 | 출처 | 해제일 |
+|---|---|---|---|---|---|---|---|---|---|
+| PII-RRN-01 | P-PII | REGEX | `\d{6}-?[1-4]\d{6}` | MASK | [주민번호] | HIGH | LEGAL | 개인정보보호법 제24조 | — |
+| PII-CARD-02 | P-PII | REGEX | `\b(\d{4}-?){3}\d{4}\b` | MASK | [카드번호] | HIGH | LEGAL | 개인정보보호법 | — |
+| PII-PHONE-03 | P-PII | REGEX | `01[016789]-?\d{3,4}-?\d{4}` | MASK | [전화번호] | MEDIUM | LEGAL | 개인정보보호법 | — |
+| PII-EMAIL-04 | P-PII | REGEX | `[\w.+-]+@[\w-]+\.[\w.]+` | MASK | [이메일] | LOW | LEGAL | 개인정보보호법 | — |
+| SEC-AWSKEY-01 | P-SEC | REGEX | `AKIA[0-9A-Z]{16}` | BLOCK | — | HIGH | INTERNAL | 정보보안규정 4.2 | — |
+| SEC-DBURL-02 | P-SEC | REGEX | `(postgres\|mysql\|jdbc)[\w+]*://[^\s]+` | BLOCK | — | HIGH | INTERNAL | 정보보안규정 4.2 | — |
+| SEC-PRIVIP-03 | P-SEC | REGEX | `\b(10\.\d{1,3}\|192\.168\|172\.(1[6-9]\|2\d\|3[01]))\.\d{1,3}\.\d{1,3}\b` | MASK | [내부IP] | MEDIUM | INTERNAL | 정보보안규정 4.3 | — |
+| CONF-CLIENT-01 | P-CONF | KEYWORD | `A사,B사,C사,프로젝트 오메가,차세대` | REVIEW | — | MEDIUM | INTERNAL | 고객사 NDA 목록 v3 | — |
+| EMB-NOVA-01 | P-EMBARGO | KEYWORD | `노바,NOVA,SKALA NOVA` | BLOCK | — | HIGH | INTERNAL | 홍보팀 엠바고 공지 2026-09-01 | **2026-09-20** |
+| EMB-ATLAS-02 | P-EMBARGO | KEYWORD | `아틀라스,ATLAS` | BLOCK | — | HIGH | INTERNAL | 홍보팀 엠바고 공지 2026-06-10 | **2026-09-04** |
+
+해제일(`policy_rule.embargo_until`)은 **그 날부터 공개할 수 있다**는 뜻이며 차단 조건은 `today < embargo_until`입니다 (0.5 D20). 나머지 8종은 기한이 없습니다 — 주민번호는 다음 달이 된다고 덜 민감해지지 않습니다.
+
+엠바고 규칙을 BLOCK으로 둔 이유는 해제일까지 예외가 없어 사람이 판단할 여지가 없기 때문입니다. REVIEW로 두면 Case B와 같은 202 폴링 흐름이 되어 시연 장면도 겹칩니다.
+
+**규칙 2종을 넣은 것은 시연을 위해서입니다.** 같은 파일에 두 제품이 들어 있고 하나만 걸립니다 — 부서로 갈리는 Case B/C와 같은 증명을 시간 축에서 한 번 더 합니다.
 
 법령 조문 번호는 국가법령정보센터에서 최종 확인 후 확정합니다. 확인 전까지 발표에서는 "개인정보보호법"까지만 언급합니다.
 
 ### 7.3 부서별 적용 매트릭스
 
-| 부서 | P-PII | P-SEC | P-CONF |
-|---|---|---|---|
-| 개발팀 (DEV) | ○ (GLOBAL) | ○ (GLOBAL) | × |
-| 영업팀 (SALES) | ○ (GLOBAL) | ○ (GLOBAL) | ○ (매핑) |
-| 인사팀 (HR) | ○ (GLOBAL) | ○ (GLOBAL) | ○ (매핑) |
-| 정보보안팀 (INFOSEC) | ○ (GLOBAL) | ○ (GLOBAL) | × |
+| 부서 | P-PII | P-SEC | P-CONF | P-EMBARGO |
+|---|---|---|---|---|
+| 개발팀 (DEV) | ○ (GLOBAL) | ○ (GLOBAL) | × | ○ (매핑) |
+| 영업팀 (SALES) | ○ (GLOBAL) | ○ (GLOBAL) | ○ (매핑) | ○ (매핑) |
+| 인사팀 (HR) | ○ (GLOBAL) | ○ (GLOBAL) | ○ (매핑) | × |
+| 정보보안팀 (INFOSEC) | ○ (GLOBAL) | ○ (GLOBAL) | × | × |
+| 홍보팀 (PR) | ○ (GLOBAL) | ○ (GLOBAL) | × | × (소유 부서) |
 
 정보보안팀은 검토자 역할만 하므로 department_policy 매핑이 없습니다. GLOBAL 정책은 전 부서에 적용되는 성질상 이 부서에도 걸리지만, 프롬프트를 제출하지 않아 실제 판정은 발생하지 않습니다 (0.5 D2).
+
+홍보팀은 P-EMBARGO의 **소유 부서**이며 적용 대상이 아닙니다 (0.5 D19). 인사팀에 P-EMBARGO를 매핑하지 않은 것은 미발표 제품 정보를 다루지 않기 때문입니다 — 매핑을 넓히면 "누가 왜 걸리는가"가 흐려집니다.
 
 ### 7.4 판정 절차
 
 1. 사용자 → 부서 조회
 2. scope=GLOBAL인 활성 정책 전부 + department_policy로 매핑된 scope=DEPT 정책 로드
 3. 정책별 활성 규칙 로드, policy_snapshot에 {policyId, version, ruleCodes[]} 기록
+3-1. **엠바고 만료 제외.** `embargo_until`이 있고 기준일이 그 날 이후면 매칭 대상에서 뺀다. `appliedRuleCodes`에는 남긴다 (0.5 D20)
 4. REGEX 규칙을 severity 내림차순으로 전부 실행. 매칭마다 finding(source=RULE) 생성
 5. KEYWORD 규칙 실행. 매칭 시 finding(source=RULE, action=REVIEW)을 **규칙당 1건** 생성. 한 규칙의 키워드가 여러 개 매칭되면 첫 매칭을 matchedKeyword에 기록하고, 매칭된 키워드 전체는 AiInspector 입력의 hits[]로 넘김 (0.5 D9)
 6. 중첩 억제. span 시작 오프셋 순으로 정렬한 뒤, 앞선 매칭의 span에 완전히 포함되는 매칭은 finding을 생성하지 않음 (0.5 D1)
@@ -1209,6 +1241,9 @@ MockAiInspector는 결정론적으로 동작해야 합니다. 데모에서 같�
 | 2 | 김OO | 영업팀 | EMPLOYEE | Case B |
 | 3 | 정OO | 인사팀 | EMPLOYEE | 시드 로그 |
 | 4 | 박OO | 정보보안팀 | SECURITY_ADMIN | SCR-02 확정 |
+| 5 | 한OO | 홍보팀 | EMPLOYEE | 시드 로그 (감사 콘솔 부서 필터) |
+
+홍보팀은 code `PR`로 추가합니다 (0.5 D18). P-EMBARGO의 소유 부서이지만 적용 대상은 아니므로 department_policy 매핑이 없습니다. 다만 정보보안팀과 달리 **감사 로그 5건(message/inspection 104~108)을 함께 시드합니다** — 부서 필터에서 홍보팀을 골랐을 때 빈 화면이 나오는 자리가 시연 중에 눌릴 수 있기 때문입니다.
 
 정보보안팀은 code `INFOSEC`, name 정보보안팀으로 department에 추가합니다. department_policy 매핑은 없습니다(검토자 역할만). GLOBAL 정책은 성질상 이 부서에도 적용되지만 프롬프트를 제출하지 않아 inspection이 0건이며, 그래서 감사 콘솔 부서 필터에도 넣지 않습니다 (0.5 D2).
 
@@ -1566,6 +1601,10 @@ EOD 3종 검증: FE 기동, BE 기동 + DB 연결, Postman Mock 응답 확인.
 | 5 | 프롬프트 자산화 — 로그에서 효율적 프롬프트 추출, 사내 가이드라인 (교수 피드백 F2) | inspection에 token_count, 별도 집계 뷰 |
 | 6 | 정책 편집 UI, 버전 발행, 소급 시뮬레이션 | policy_audit 테이블, 편집 화면 |
 | 7 | 기성 게이트웨이(LiteLLM 등) 하단 결합 — 프록시·키 관리 위임 | AiInspector가 게이트웨이 엔드포인트를 가리킴 |
+| 8 | 파일 검사 심화 — XLSX 파트 전수 탐색(sharedStrings·숨긴 시트·피벗 캐시), 컨테이너 검증(zip bomb·매크로·외부 링크), 저장값/수식/서식 3중 검사 | 추출기 내부. 엔진·스키마 무변경 |
+| 9 | 탐지 정확도 — 공통 정규화(NFKC·제로폭 제거·오프셋 매핑), 체크섬 검증(주민번호·Luhn), 한글 이름 NER | RegexMatcher 앞단에 정규화 계층 추가 |
+| 10 | 일관 가명화 — `[주민번호]` 라벨 치환 대신 형식 보존 대체값과 역치환 맵 | 7.6 마스킹 전략 교체. `policy_rule.mask_label` 의미 변경 동반 |
+| 11 | 모듈러 모놀리스 전환 — policy·inspection·review 모듈 분리, 경계 강제 | 패키지 재편. 서비스 분리 전 단계 |
 
 ---
 

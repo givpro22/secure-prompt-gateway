@@ -15,6 +15,7 @@ const DEPARTMENTS = [
   { deptId: 2, code: 'SALES', name: '영업팀' },
   { deptId: 3, code: 'HR', name: '인사팀' },
   { deptId: 4, code: 'INFOSEC', name: '정보보안팀' },
+  { deptId: 5, code: 'PR', name: '홍보팀' },
 ]
 
 const USERS = [
@@ -22,9 +23,16 @@ const USERS = [
   { userId: 2, name: '김OO', email: 'kim@example.com', role: 'EMPLOYEE', deptId: 2 },
   { userId: 3, name: '정OO', email: 'jung@example.com', role: 'EMPLOYEE', deptId: 3 },
   { userId: 4, name: '박OO', email: 'park@example.com', role: 'SECURITY_ADMIN', deptId: 4 },
+  { userId: 5, name: '한OO', email: 'han@example.com', role: 'EMPLOYEE', deptId: 5 },
 ]
 
-/** 기획서 7.2 규칙 8종 */
+/**
+ * 기획서 7.2 규칙 8종 + P-EMBARGO 2종 (결정 4).
+ *
+ * `embargoUntil`은 **해제일**이다. 차단 조건은 today < embargoUntil이며 경계일 당일은
+ * 이미 풀린 쪽이다. 백엔드 RuleEngine.isReleased와 같은 부등호를 써야 픽스처 모드와
+ * 실서버가 다른 판정을 내지 않는다.
+ */
 const RULES = [
   {
     ruleId: 1, code: 'PII-RRN-01', policyCode: 'P-PII', ruleType: 'REGEX',
@@ -67,16 +75,57 @@ const RULES = [
     keywords: ['A사', 'B사', 'C사', '프로젝트 오메가', '차세대'], action: 'REVIEW', maskLabel: null,
     severity: 'MEDIUM', obligation: 'INTERNAL', source: '고객사 NDA 목록 v3', description: '고객사명·프로젝트명 언급 시 검토',
   },
+  {
+    ruleId: 9, code: 'EMB-NOVA-01', policyCode: 'P-EMBARGO', ruleType: 'KEYWORD',
+    keywords: ['노바', 'NOVA', 'SKALA NOVA'], action: 'BLOCK', maskLabel: null,
+    severity: 'HIGH', obligation: 'INTERNAL', source: '홍보팀 엠바고 공지 2026-09-01',
+    description: '신제품 SKALA NOVA 관련 표현. 2026-09-20 해제', embargoUntil: '2026-09-20',
+  },
+  {
+    ruleId: 10, code: 'EMB-ATLAS-02', policyCode: 'P-EMBARGO', ruleType: 'KEYWORD',
+    keywords: ['아틀라스', 'ATLAS'], action: 'BLOCK', maskLabel: null,
+    severity: 'HIGH', obligation: 'INTERNAL', source: '홍보팀 엠바고 공지 2026-06-10',
+    description: '제품 SKALA ATLAS 관련 표현. 2026-09-04 해제', embargoUntil: '2026-09-04',
+  },
 ]
 
 const POLICIES = [
-  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 3, scope: 'GLOBAL' },
-  { policyId: 2, code: 'P-SEC', name: '자격증명·인프라 정보 보호', category: 'SECRET', version: 7, scope: 'GLOBAL' },
-  { policyId: 3, code: 'P-CONF', name: '고객사 프로젝트 정보 통제', category: 'CONFIDENTIAL', version: 2, scope: 'DEPT' },
+  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 3, scope: 'GLOBAL', ownerDept: '정보보안팀' },
+  { policyId: 2, code: 'P-SEC', name: '자격증명·인프라 정보 보호', category: 'SECRET', version: 7, scope: 'GLOBAL', ownerDept: '정보보안팀' },
+  { policyId: 3, code: 'P-CONF', name: '고객사 프로젝트 정보 통제', category: 'CONFIDENTIAL', version: 2, scope: 'DEPT', ownerDept: '정보보안팀' },
+  { policyId: 4, code: 'P-EMBARGO', name: '보도자료 엠바고', category: 'EMBARGO', version: 1, scope: 'DEPT', ownerDept: '홍보팀' },
 ]
 
-/** 기획서 7.3 부서별 적용 매트릭스. 개발팀 2건, 영업·인사팀 3건 (D8) */
-const DEPT_POLICY = { 1: ['P-PII', 'P-SEC'], 2: ['P-PII', 'P-SEC', 'P-CONF'], 3: ['P-PII', 'P-SEC', 'P-CONF'], 4: ['P-PII', 'P-SEC'] }
+/**
+ * 기획서 7.3 부서별 적용 매트릭스 + P-EMBARGO 매핑 (결정 2).
+ * 개발팀 3건, 영업팀 4건, 인사팀 3건, 정보보안팀·홍보팀 2건.
+ * 홍보팀에 P-EMBARGO를 매핑하지 않는 것은 의도다 — 발표 주체는 자기 엠바고에 걸리지 않는다.
+ */
+const DEPT_POLICY = {
+  1: ['P-PII', 'P-SEC', 'P-EMBARGO'],
+  2: ['P-PII', 'P-SEC', 'P-CONF', 'P-EMBARGO'],
+  3: ['P-PII', 'P-SEC', 'P-CONF'],
+  4: ['P-PII', 'P-SEC'],
+  5: ['P-PII', 'P-SEC'],
+}
+
+/**
+ * 엠바고 만료 판정의 기준일. 빈 문자열이면 실제 오늘이다.
+ * 백엔드의 gateway.embargo.reference-date와 같은 역할이며, 발표 당일을 흉내 낼 때만 채운다.
+ */
+const EMBARGO_REFERENCE_DATE = process.env.GATEWAY_EMBARGO_REFERENCE_DATE ?? ''
+
+function today() {
+  return EMBARGO_REFERENCE_DATE || new Date().toISOString().slice(0, 10)
+}
+
+/** 해제일이 기준일과 같거나 앞서면 이미 풀린 것이다 (경계일 당일은 해제). */
+function isReleased(rule) {
+  return Boolean(rule.embargoUntil) && today() >= rule.embargoUntil
+}
+
+/** 백엔드 gateway.limits.max-input-chars와 같은 값 */
+const MAX_INPUT_CHARS = 50000
 
 const AI_MOCK_DELAY_MS = 2500
 const AI_MOCK_FAIL_KEYWORD = '__FAIL__'
@@ -97,6 +146,8 @@ function policiesForDept(deptId) {
       obligation: rule.obligation,
       source: rule.source,
       description: rule.description,
+      // 해제일은 숨기지 않는다. 사용자가 "언제 다시 시도하면 되는지" 알아야 우회를 배우지 않는다.
+      embargoUntil: rule.embargoUntil ?? null,
       // pattern은 응답에 넣지 않는다 (C5)
     })),
   }))
@@ -107,13 +158,18 @@ function rulesForDept(deptId) {
   return RULES.filter((r) => codes.includes(r.policyCode))
 }
 
+/** 매칭에 실제로 쓰이는 규칙. 만료된 엠바고는 빠진다 — appliedRuleCodes에는 남는다. */
+function effectiveRulesForDept(deptId) {
+  return rulesForDept(deptId).filter((r) => !isReleased(r))
+}
+
 function categoryOf(rule) {
   return POLICIES.find((p) => p.code === rule.policyCode).category
 }
 
 /** 규칙 판정 — 매칭 → D1 중첩 억제 → 우선순위 결정 → D5 마스킹 */
 function evaluate(text, deptId) {
-  const rules = rulesForDept(deptId)
+  const rules = effectiveRulesForDept(deptId)
   const raw = []
 
   for (const rule of rules) {
@@ -176,13 +232,15 @@ function evaluate(text, deptId) {
     severity: m.rule.severity,
     obligation: m.rule.obligation,
     source: m.rule.source,
+    embargoUntil: m.rule.embargoUntil ?? null,
   }))
 
   const policies = policiesForDept(deptId)
   return {
     decision,
     submittedText,
-    ruleResult: { matches, appliedRuleCodes: rules.map((r) => r.code) },
+    // 만료된 엠바고 규칙도 여기엔 남는다 — 적용된 규칙과 매칭된 규칙은 다르다 (8.4).
+    ruleResult: { matches, appliedRuleCodes: rulesForDept(deptId).map((r) => r.code) },
     policySnapshot: {
       policies: policies.map((p) => ({
         policyId: p.policyId,
@@ -453,6 +511,12 @@ export function fixtureServer() {
             const body = await readBody(req)
             if (typeof body.text !== 'string' || body.text.trim() === '') {
               return fail(res, 400, 'INVALID_REQUEST', 'text must not be blank')
+            }
+            // 백엔드 gateway.limits.max-input-chars와 같은 값. 어긋나면 픽스처 모드에서만
+            // 통과하는 입력이 생긴다.
+            if (body.text.length > MAX_INPUT_CHARS) {
+              return fail(res, 400, 'INVALID_REQUEST',
+                `text가 최대 길이를 초과했습니다. (${body.text.length.toLocaleString()}자 / 최대 ${MAX_INPUT_CHARS.toLocaleString()}자) 내용을 나눠서 보내십시오.`)
             }
 
             const { inspection, decision, messageId } = state.createInspection({ text: body.text, userId })

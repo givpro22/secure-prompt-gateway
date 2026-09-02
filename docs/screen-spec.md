@@ -104,7 +104,7 @@
 | `PendingIndicator` | 스피너 + "보안 검토 중" + 경과 시간 | 폴링 로컬 상태 + `aiStatus` |
 | `AiCandidateList` | AI 후보 목록 (읽기 전용) | GET `/inspections/{id}` → `aiAssessment.riskCandidates[].{code,category,rationale,evidence[]}` |
 
-`VerdictCard` 내부 행 하나는 `ruleResult.matches[i]`의 `code` · `category` · `action` · `source`로 구성합니다. 카드 헤더의 "규칙 N건"은 **`matches` 배열 길이**이며 `appliedRuleCodes` 길이가 아닙니다 — 적용된 규칙과 매칭된 규칙은 다릅니다 (8.4, D1).
+`VerdictCard` 내부 행 하나는 `ruleResult.matches[i]`의 `code` · `category` · `action` · `source`로 구성하며, `embargoUntil`이 있으면 "YYYY-MM-DD 해제" 칩을 덧붙입니다. 판정이 BLOCK이고 엠바고 매칭이 있으면 카드 하단 힌트가 "○○부터 공개할 수 있는 내용입니다"로 바뀝니다 — 언제 다시 시도하면 되는지 모르면 사용자는 우회를 학습합니다 (0.5 D20). 카드 헤더의 "규칙 N건"은 **`matches` 배열 길이**이며 `appliedRuleCodes` 길이가 아닙니다 — 적용된 규칙과 매칭된 규칙은 다릅니다 (8.4, D1).
 
 ### 2.2 5개 상태 프레임
 
