@@ -129,6 +129,8 @@ INFOSEC을 빼는 것은 FE의 표시 결정이며, API는 마스터 4행을 그
 ```
 
 - `appliedVia` — `GLOBAL`(scope=GLOBAL이라 전사 적용) 또는 `DEPT`(department_policy 매핑). 기획서 7.3
+- `ownerDept` — 정책을 **만든** 부서명. 적용 부서와 다르다. 엠바고는 홍보팀이 걸고 개발팀·영업팀이 걸린다 (기획서 0.5 D19). 소유 부서가 없으면 `null`
+- `rules[].embargoUntil` — 엠바고 **해제일** `yyyy-MM-dd`. 그 날부터 공개 가능하며 차단 조건은 `today < embargoUntil`. 엠바고 규칙이 아니면 `null` (기획서 0.5 D20)
   매트릭스의 "○ (GLOBAL)" / "○ (매핑)"을 필드로 옮긴 것이다.
 - **`pattern`은 응답에 없다.** 탐지 정규식이 클라이언트에 노출되면 우회 입력을 만들 수 있다.
 - 비활성(`is_active=false`) 정책·규칙은 포함하지 않는다.
@@ -204,8 +206,7 @@ BLOCK 응답의 `span` 값이 요청 문자열과 실제로 맞아야 하기 때
         "matchedKeyword": null,
         "severity": "HIGH",
         "obligation": "INTERNAL",
-        "source": "정보보안규정 4.2"
-      },
+        "source": "정보보안규정 4.2", "embargoUntil": null },
       {
         "code": "PII-RRN-01",
         "category": "PII",
@@ -217,8 +218,7 @@ BLOCK 응답의 `span` 값이 요청 문자열과 실제로 맞아야 하기 때
         "matchedKeyword": null,
         "severity": "HIGH",
         "obligation": "LEGAL",
-        "source": "개인정보보호법 제24조"
-      }
+        "source": "개인정보보호법 제24조", "embargoUntil": null }
     ],
     "appliedRuleCodes": [
       "PII-CARD-02",
@@ -310,8 +310,7 @@ BLOCK이면 AI를 호출하지 않는다(`aiStatus: SKIPPED`). 이미 확정된 
         "matchedKeyword": null,
         "severity": "MEDIUM",
         "obligation": "LEGAL",
-        "source": "개인정보보호법"
-      }
+        "source": "개인정보보호법", "embargoUntil": null }
     ],
     "appliedRuleCodes": [
       "PII-CARD-02",
@@ -344,7 +343,7 @@ BLOCK이면 AI를 호출하지 않는다(`aiStatus: SKIPPED`). 이미 확정된 
     "matches": [
       { "code": "CONF-CLIENT-01", "category": "CONFIDENTIAL", "action": "REVIEW",
         "span": [0, 2], "matchedKeyword": "A사", "severity": "MEDIUM",
-        "obligation": "INTERNAL", "source": "고객사 NDA 목록 v3" }
+        "obligation": "INTERNAL", "source": "고객사 NDA 목록 v3", "embargoUntil": null }
     ]
   },
   "aiStatus": "PENDING",

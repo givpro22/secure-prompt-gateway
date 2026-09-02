@@ -19,7 +19,7 @@ Project secure_prompt_gateway {
 
 Table department {
   dept_id bigserial [pk]
-  code varchar(20) [unique, not null, note: 'DEV | SALES | HR | INFOSEC']
+  code varchar(20) [unique, not null, note: 'DEV | SALES | HR | INFOSEC | PR']
   name varchar(50) [not null]
 
   Note: '부서 마스터. INFOSEC은 검토자 역할이라 department_policy 매핑이 없다 (0.5 D2)'
@@ -38,11 +38,12 @@ Table app_user {
 
 Table policy {
   policy_id bigserial [pk]
-  code varchar(20) [unique, not null, note: 'P-PII | P-SEC | P-CONF']
+  code varchar(20) [unique, not null, note: 'P-PII | P-SEC | P-CONF | P-EMBARGO']
   name varchar(100) [not null]
-  category varchar(20) [not null, note: 'PII | SECRET | CONFIDENTIAL']
+  category varchar(20) [not null, note: 'PII | SECRET | CONFIDENTIAL | EMBARGO']
   version int [not null, default: 1]
   is_active boolean [not null, default: true]
+  owner_dept_id bigint [ref: > department.dept_id, note: '정책을 만든 부서. 적용 부서와 다르다 (0.5 D19)']
   scope varchar(20) [not null, note: 'GLOBAL | DEPT']
   created_at timestamptz [not null, default: `now()`]
 
@@ -61,9 +62,10 @@ Table policy_rule {
   obligation varchar(20) [not null, note: 'LEGAL | INTERNAL']
   source varchar(100)
   description varchar(200)
+  embargo_until date [note: '엠바고 해제일. 차단 조건은 today < embargo_until. NULL이면 기한 없음 (0.5 D20)']
   is_active boolean [not null, default: true]
 
-  Note: '규칙 8종 (7.2). pattern은 정규식 원문 — SQL 리터럴에서 백슬래시 유실 주의'
+  Note: '규칙 10종 (7.2). pattern은 정규식 원문 — SQL 리터럴에서 백슬래시 유실 주의'
 }
 
 Table department_policy {

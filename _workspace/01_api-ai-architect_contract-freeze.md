@@ -120,6 +120,7 @@
 ```
 
 - `appliedVia`: `GLOBAL`(scope=GLOBAL이라 전사 적용) 또는 `DEPT`(department_policy 매핑으로 적용). 7.3 매트릭스의 "○ (GLOBAL)" / "○ (매핑)"을 그대로 필드화한 것이다.
+- `ownerDept`: 정책을 **만든** 부서명. `appliedVia`가 답하는 "어떻게 적용됐나"와 다른 질문인 "누가 정했나"에 답한다 (0.5 D19). 소유 부서가 없으면 `null`.
 - `is_active=false`인 정책·규칙은 응답에 포함하지 않는다.
 - `rules[].pattern`은 **없다** (C5).
 
@@ -330,6 +331,8 @@ SUGGESTED가 남아 있으면 **아무것도 건드리지 않는다.** 부분 �
 | `policy_rule.mask_label` | `maskLabel` | `rule.maskLabel` |
 | `policy_rule.severity` | `severity` | `rule.severity` |
 | `policy_rule.obligation` | `obligation` | `rule.obligation` |
+| `policy_rule.embargo_until` | `embargoUntil` | `rule.embargoUntil` (문자열) |
+| `policy.owner_dept_id` → `department.name` | `ownerDept` | `policy.ownerDept` |
 | `policy_rule.source` | `source` | `rule.source` |
 | `policy_rule.description` | `description` | `rule.description` |
 
@@ -418,6 +421,7 @@ SUGGESTED가 남아 있으면 **아무것도 건드리지 않는다.** 부분 �
 | `policy_rule.obligation` | `LEGAL`, `INTERNAL` | 법령 / 사규 |
 | `policy.scope` | `GLOBAL`, `DEPT` | 전사 / 부서 |
 | `policy.appliedVia` (파생) | `GLOBAL`, `DEPT` | 전사 적용 / 부서 적용 |
+| `policy.category` | `PII`, `SECRET`, `CONFIDENTIAL`, `EMBARGO` | 개인정보 / 자격증명 / 기밀 / 엠바고 |
 | `policy.category` | `PII`, `SECRET`, `CONFIDENTIAL` | 개인정보 / 자격증명 / 기밀 |
 | `department.code` | `DEV`, `SALES`, `HR`, `INFOSEC` (D2) | 개발팀 / 영업팀 / 인사팀 / 정보보안팀 |
 | `app_user.role` | `EMPLOYEE`, `SECURITY_ADMIN` | 직원 / 보안 담당자 |
@@ -495,13 +499,14 @@ public interface AiResultSink {
   "matches": [
     { "code": "SEC-DBURL-02", "category": "SECRET", "action": "BLOCK",
       "span": [18, 56], "matchedKeyword": null, "severity": "HIGH",
-      "obligation": "INTERNAL", "source": "정보보안규정 4.2" }
+      "obligation": "INTERNAL", "source": "정보보안규정 4.2", "embargoUntil": null }
   ],
   "appliedRuleCodes": ["PII-RRN-01", "…"]
 }
 ```
 
 - `span`은 `[start, end)` 2원소 배열, **원문 기준**이다.
+- `embargoUntil`은 엠바고 **해제일**(`yyyy-MM-dd` 문자열)이다. 엠바고 규칙이 아니면 `null`. 차단 조건은 `today < embargoUntil`이며 **경계일 당일은 이미 풀린 것**이다 (기획서 0.5 D20). `LocalDate`가 아니라 문자열인 이유는 이 구조가 JSONB로 저장되고 Hibernate가 자체 ObjectMapper로 직렬화하기 때문이다 — JavaTimeModule 등록 여부에 화면 계약이 흔들려서는 안 된다.
 - `matchedKeyword`는 KEYWORD 규칙 매칭에만 값이 있고 REGEX는 `null`이다. REGEX 매칭 문자열을 여기에 넣지 않는다 — 주민번호 원문이 `rule_result` JSONB에 그대로 남게 된다.
 - **`matches[]`는 규칙당 1건이다** (C4-1). 한 KEYWORD 규칙이 여러 키워드에 매칭돼도 항목은 하나이며, `matchedKeyword`에는 **첫 매칭**(가장 앞선 오프셋)을 싣는다. 매칭된 키워드 전부는 `AiInspectionRequest.hits`로 간다.
 - `matches[]`는 D1 중첩 억제 **후**의 목록이다. Case A에서 2건이다.
