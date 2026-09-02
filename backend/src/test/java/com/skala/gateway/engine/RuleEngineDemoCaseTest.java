@@ -32,16 +32,20 @@ class RuleEngineDemoCaseTest {
     private PolicyRuleRepository policyRuleRepository;
 
     @Test
-    @DisplayName("Case A — 원시 매칭 4건이 중첩 억제로 finding 2건이 된다 (D11)")
+    @DisplayName("Case A — 원시 매칭 3건이 중첩 억제로 finding 2건이 된다 (D11, D21로 갱신)")
     void caseA_suppressesTwoNestedMatches() {
         EngineVerdict verdict = evaluate(DemoCases.CASE_A, DemoCases.DEPT_DEV);
 
-        // 억제 대상이 사설 IP 하나뿐이라고 알고 짜면 여기가 3건이 된다.
+        // D21 이전에는 여기가 4건이었다. PII-EMAIL-04가 `p%40ss@10.0.3.21`을 이메일로
+        // 오탐했고 SEC-DBURL-02 구간에 포함되어 억제됐다. 이메일 정규식의 최상위 도메인을
+        // 알파벳으로 못 박으면서 그 오탐이 애초에 발생하지 않는다 — 억제로 가리던 것을
+        // 정규식이 직접 해결한 것이다.
+        //
+        // 중첩 억제 시연은 그대로다. SEC-PRIVIP-03이 여전히 SEC-DBURL-02 안에 들어간다.
         assertThat(verdict.rawMatches())
                 .extracting(RuleHit::code, RuleHit::spanStart, RuleHit::spanEnd)
                 .containsExactlyInAnyOrder(
                         tuple("SEC-DBURL-02", 18, 56),
-                        tuple("PII-EMAIL-04", 37, 51),
                         tuple("SEC-PRIVIP-03", 42, 51),
                         tuple("PII-RRN-01", 73, 87));
 
@@ -55,11 +59,13 @@ class RuleEngineDemoCaseTest {
         // BLOCK이면 마스킹을 실행하지 않는다 (D5). 실행했다면 BLOCK 규칙에 mask_label이 없어 NPE다.
         assertThat(verdict.maskedText()).isNull();
         // 억제된 규칙도 appliedRuleCodes에는 남는다 — 적용된 규칙과 매칭된 규칙은 다르다.
-        // 7 → 9. 개발팀에 P-EMBARGO(규칙 2종)가 매핑되면서 로드되는 규칙이 늘었다.
-        // Case A 문장에는 엠바고 키워드가 없으므로 매칭은 그대로 2건이다.
+        // 7 → 9 → 11. P-EMBARGO 2종(D20)과 PII 신규 2종(D21)이 차례로 늘었다.
+        // 로드되는 규칙이 늘어도 이 문장에 걸리는 것은 그대로 2건이다 —
+        // 적용된 규칙과 매칭된 규칙은 다르다.
         assertThat(verdict.ruleResult().appliedRuleCodes())
-                .contains("SEC-PRIVIP-03", "PII-EMAIL-04", "EMB-NOVA-01", "EMB-ATLAS-02")
-                .hasSize(9);
+                .contains("SEC-PRIVIP-03", "PII-EMAIL-04", "EMB-NOVA-01", "EMB-ATLAS-02",
+                          "PII-BIZNO-05", "PII-ACCOUNT-06")
+                .hasSize(11);
         assertThat(verdict.ruleResult().matches()).hasSize(2);
         // REGEX 매칭 문자열을 JSONB에 남기지 않는다 — 남기면 주민번호 원문이 rule_result에 박힌다.
         assertThat(verdict.ruleResult().matches())

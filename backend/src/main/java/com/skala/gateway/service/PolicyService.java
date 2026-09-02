@@ -42,7 +42,7 @@ public class PolicyService {
      * @param snapshot         {@code inspection.policy_snapshot}에 그대로 저장된다. 정책이 나중에
      *                         바뀌어도 판정 당시의 근거가 보존된다 (6.4)
      * @param policyVersion    {@code AiInspectionRequest.policyVersion}. {@code code:version} 쌍을
-     *                         <b>code 사전순</b>으로 {@code ;} 연결한 것 ({@code P-CONF:2;P-PII:3;P-SEC:7}).
+     *                         <b>code 사전순</b>으로 {@code ;} 연결한 것 ({@code P-CONF:2;P-PII:4;P-SEC:7}).
      *                         정렬을 고정하는 이유는 Mock의 결정론 때문이다
      */
     public record PolicyContext(List<PolicyRule> rules, PolicySnapshot snapshot, String policyVersion) {

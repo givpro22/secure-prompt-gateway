@@ -36,22 +36,22 @@ const USERS = [
 const RULES = [
   {
     ruleId: 1, code: 'PII-RRN-01', policyCode: 'P-PII', ruleType: 'REGEX',
-    pattern: /\d{6}-?[1-4]\d{6}/g, action: 'MASK', maskLabel: '[주민번호]',
+    pattern: /(?<![0-9])\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])-?[1-4]\d{6}(?![0-9])/g, action: 'MASK', maskLabel: '[주민번호]',
     severity: 'HIGH', obligation: 'LEGAL', source: '개인정보보호법 제24조', description: '주민등록번호 마스킹',
   },
   {
     ruleId: 2, code: 'PII-CARD-02', policyCode: 'P-PII', ruleType: 'REGEX',
-    pattern: /\b(?:\d{4}-?){3}\d{4}\b/g, action: 'MASK', maskLabel: '[카드번호]',
+    pattern: /(?<![0-9])(?:\d{4}-\d{4}-\d{4}-\d{4}|\d{16})(?![0-9])/g, action: 'MASK', maskLabel: '[카드번호]',
     severity: 'HIGH', obligation: 'LEGAL', source: '개인정보보호법', description: '카드번호 마스킹',
   },
   {
     ruleId: 3, code: 'PII-PHONE-03', policyCode: 'P-PII', ruleType: 'REGEX',
-    pattern: /01[016789]-?\d{3,4}-?\d{4}/g, action: 'MASK', maskLabel: '[전화번호]',
+    pattern: /(?<![0-9])01[016789](?:-\d{3,4}-\d{4}|\d{7,8})(?![0-9])/g, action: 'MASK', maskLabel: '[전화번호]',
     severity: 'MEDIUM', obligation: 'LEGAL', source: '개인정보보호법', description: '휴대전화번호 마스킹',
   },
   {
     ruleId: 4, code: 'PII-EMAIL-04', policyCode: 'P-PII', ruleType: 'REGEX',
-    pattern: /[\w.+-]+@[\w-]+\.[\w.]+/g, action: 'MASK', maskLabel: '[이메일]',
+    pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, action: 'MASK', maskLabel: '[이메일]',
     severity: 'LOW', obligation: 'LEGAL', source: '개인정보보호법', description: '이메일 마스킹',
   },
   {
@@ -69,6 +69,19 @@ const RULES = [
     pattern: /\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/g,
     action: 'MASK', maskLabel: '[내부IP]',
     severity: 'MEDIUM', obligation: 'INTERNAL', source: '정보보안규정 4.3', description: '사설 IP 마스킹',
+  },
+  {
+    ruleId: 11, code: 'PII-BIZNO-05', policyCode: 'P-PII', ruleType: 'REGEX',
+    pattern: /(?<![0-9])\d{3}-\d{2}-\d{5}(?![0-9])/g, action: 'MASK', maskLabel: '[사업자번호]',
+    severity: 'MEDIUM', obligation: 'INTERNAL', source: '정보보안규정 4.4', description: '사업자등록번호 형식 탐지',
+  },
+  {
+    // 문맥을 요구한다. 형식만으로는 버전 번호·주문 번호와 구분되지 않는다.
+    // lookbehind는 마스킹 구간에 포함되지 않으므로 '계좌'라는 단어는 본문에 남는다.
+    ruleId: 12, code: 'PII-ACCOUNT-06', policyCode: 'P-PII', ruleType: 'REGEX',
+    pattern: /(?<=계좌[^\n]{0,8}|입금[^\n]{0,8}|송금[^\n]{0,8}|이체[^\n]{0,8})(?<![0-9])\d{2,6}-\d{2,6}-\d{2,8}(?![0-9])/g,
+    action: 'MASK', maskLabel: '[계좌번호]',
+    severity: 'HIGH', obligation: 'LEGAL', source: '개인정보보호법', description: '계좌번호. 금융 문맥이 있을 때만 탐지',
   },
   {
     ruleId: 8, code: 'CONF-CLIENT-01', policyCode: 'P-CONF', ruleType: 'KEYWORD',
@@ -90,7 +103,7 @@ const RULES = [
 ]
 
 const POLICIES = [
-  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 3, scope: 'GLOBAL', ownerDept: '정보보안팀' },
+  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 4, scope: 'GLOBAL', ownerDept: '정보보안팀' },
   { policyId: 2, code: 'P-SEC', name: '자격증명·인프라 정보 보호', category: 'SECRET', version: 7, scope: 'GLOBAL', ownerDept: '정보보안팀' },
   { policyId: 3, code: 'P-CONF', name: '고객사 프로젝트 정보 통제', category: 'CONFIDENTIAL', version: 2, scope: 'DEPT', ownerDept: '정보보안팀' },
   { policyId: 4, code: 'P-EMBARGO', name: '보도자료 엠바고', category: 'EMBARGO', version: 1, scope: 'DEPT', ownerDept: '홍보팀' },

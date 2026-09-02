@@ -64,10 +64,18 @@ export const STATUS_FILTER_OPTIONS = [
 ]
 
 /**
- * 마스킹 라벨 5종 (기획서 7.2 규칙 8종의 mask_label).
+ * 마스킹 라벨 7종 (기획서 7.2 규칙의 mask_label).
  * D3 — finding의 span은 원문 기준이라 마스킹본에서 밀린다. 오프셋 산술 대신 이 문자열을 검색한다.
  */
-export const MASK_LABELS = ['[주민번호]', '[카드번호]', '[전화번호]', '[이메일]', '[내부IP]']
+export const MASK_LABELS = [
+  '[주민번호]',
+  '[카드번호]',
+  '[전화번호]',
+  '[이메일]',
+  '[내부IP]',
+  '[사업자번호]',
+  '[계좌번호]',
+]
 
 export function term(map, value, fallback = '—') {
   if (value === null || value === undefined || value === '') return fallback
