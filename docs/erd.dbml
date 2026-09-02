@@ -1,0 +1,169 @@
+// =============================================================================
+// 사내 생성형 AI 게이트웨이 — ERD (dbdiagram.io DBML)
+//
+// 원본: 기획서 6장 / 부록 B. 실제 DDL은 backend/src/main/resources/db/migration/V1__schema.sql
+// 이 파일은 V1__schema.sql과 대조되어야 한다. 어긋나면 DDL이 정답이다.
+//
+// Core Domain 8개만 DDL로 생성한다. Future Domain 4개는 Logical Model 표기용이며
+// 실행되지 않는다 (기획서 6.1, 6.5, 0.3 범위 밖).
+//
+// 사용법: 전체 복사 → https://dbdiagram.io/d 에 붙여넣기 → Export PNG/PDF
+// =============================================================================
+
+Project secure_prompt_gateway {
+  database_type: 'PostgreSQL'
+  Note: '사내 생성형 AI 게이트웨이 — 입력 프롬프트 정책 검사 (Core 8 + Future 4)'
+}
+
+// ============================== Core Domain ==================================
+
+Table department {
+  dept_id bigserial [pk]
+  code varchar(20) [unique, not null, note: 'DEV | SALES | HR | INFOSEC']
+  name varchar(50) [not null]
+
+  Note: '부서 마스터. INFOSEC은 검토자 역할이라 department_policy 매핑이 없다 (0.5 D2)'
+}
+
+Table app_user {
+  user_id bigserial [pk]
+  dept_id bigint [not null, ref: > department.dept_id]
+  name varchar(50) [not null]
+  email varchar(100) [unique]
+  role varchar(20) [not null, note: 'EMPLOYEE | SECURITY_ADMIN']
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: '로그인 없음. 요청 헤더 X-User-Id로 식별 (8.1)'
+}
+
+Table policy {
+  policy_id bigserial [pk]
+  code varchar(20) [unique, not null, note: 'P-PII | P-SEC | P-CONF']
+  name varchar(100) [not null]
+  category varchar(20) [not null, note: 'PII | SECRET | CONFIDENTIAL']
+  version int [not null, default: 1]
+  is_active boolean [not null, default: true]
+  scope varchar(20) [not null, note: 'GLOBAL | DEPT']
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: 'scope=GLOBAL은 매핑 없이 전 부서 적용. DEPT만 department_policy로 매핑 (6.4)'
+}
+
+Table policy_rule {
+  rule_id bigserial [pk]
+  policy_id bigint [not null, ref: > policy.policy_id]
+  code varchar(30) [unique, not null, note: '발표·로그에서 이 값을 그대로 사용']
+  rule_type varchar(20) [not null, note: 'REGEX | KEYWORD']
+  pattern text [not null]
+  action varchar(20) [not null, note: 'MASK | BLOCK | REVIEW']
+  mask_label varchar(30) [note: 'action=MASK일 때만 존재. CHECK로 강제']
+  severity varchar(10) [not null, note: 'HIGH | MEDIUM | LOW']
+  obligation varchar(20) [not null, note: 'LEGAL | INTERNAL']
+  source varchar(100)
+  description varchar(200)
+  is_active boolean [not null, default: true]
+
+  Note: '규칙 8종 (7.2). pattern은 정규식 원문 — SQL 리터럴에서 백슬래시 유실 주의'
+}
+
+Table department_policy {
+  dept_id bigint [not null, ref: > department.dept_id]
+  policy_id bigint [not null, ref: > policy.policy_id]
+  applied_at timestamptz [not null, default: `now()`]
+
+  indexes { (dept_id, policy_id) [pk] }
+  Note: '복합 PK. 서러게이트 PK를 두면 중복 매핑을 막지 못한다. 시드는 (SALES,P-CONF),(HR,P-CONF) 2행뿐'
+}
+
+Table message {
+  message_id bigserial [pk]
+  user_id bigint [not null, ref: > app_user.user_id]
+  original_text text [not null, note: '원문. 화면 미노출']
+  submitted_text text [note: '마스킹 적용 후 본문. NULL이면 미전송(BLOCK)']
+  status varchar(20) [not null, note: 'ALLOWED | MASKED | BLOCKED | PENDING_REVIEW']
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: '원문 보관과 전송본을 분리한다. 외부로 나가는 것은 submitted_text뿐 (6.4, 9.3)'
+}
+
+Table inspection {
+  inspection_id bigserial [pk]
+  message_id bigint [not null, ref: > message.message_id]
+  phase varchar(10) [not null, default: 'INPUT', note: 'INPUT | OUTPUT(future)']
+  policy_snapshot jsonb [not null, note: '{policies:[{policyId,code,version,ruleCodes[]}]}']
+  rule_result jsonb [not null, note: '{matches:[...], appliedRuleCodes:[...]} — 9.4 ruleResult']
+  ai_status varchar(20) [not null, note: 'SKIPPED | PENDING | COMPLETED | FAILED']
+  ai_result jsonb [note: '9.4 aiAssessment 원본. BLOCK이면 AI 미호출이라 NULL']
+  final_decision varchar(20) [note: 'ALLOW | MASK | BLOCK | PENDING']
+  decided_by varchar(10) [note: 'RULE | HUMAN | null']
+  created_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz [note: 'AI 완료 또는 사람 확정 시각']
+
+  Note: 'JSONB 3개가 AI-Ready "Structured Data" 원칙의 증거. AI 스키마가 확장돼도 컬럼 추가 없음 (6.4)'
+}
+
+Table inspection_finding {
+  finding_id bigserial [pk]
+  inspection_id bigint [not null, ref: > inspection.inspection_id]
+  source varchar(10) [not null, note: 'RULE | AI']
+  rule_id bigint [ref: > policy_rule.rule_id, note: 'AI 후보는 NULL. CHECK로 강제']
+  code varchar(30) [not null]
+  category varchar(20) [not null]
+  span_start int [note: '원문 기준 오프셋. 재계산하지 않음 (0.5 D3)']
+  span_end int
+  action varchar(20) [note: '규칙 finding만. MASK | BLOCK | REVIEW']
+  rationale text [note: 'AI 후보의 근거 서술']
+  evidence jsonb [note: 'AI 후보의 참조 출처 배열 [{source, excerpt}]']
+  review_status varchar(20) [not null, default: 'SUGGESTED', note: 'SUGGESTED | ACCEPTED | REJECTED | CONFIRMED (0.5 D6). 규칙 finding은 CONFIRMED 고정']
+  reviewed_by bigint [ref: > app_user.user_id]
+  reviewed_at timestamptz
+
+  Note: 'DEFAULT SUGGESTED가 "AI는 결정하지 못한다"는 책임 경계를 DB 수준에서 보증한다 (4장)'
+}
+
+// ===================== Future Domain (Logical only) ==========================
+// DDL을 실행하지 않는다. 기획서 6.5 · 17장 향후 확장 로드맵의 확장 지점 표기용.
+
+Table attachment {
+  attachment_id bigserial [pk]
+  message_id bigint [ref: > message.message_id]
+  file_name varchar(200)
+  mime_type varchar(100)
+  extracted_text text
+  extract_status varchar(20)
+
+  Note: 'Future — 첨부파일 메타. 텍스트 추출 후 같은 규칙 엔진에 태운다'
+}
+
+Table knowledge_source {
+  source_id bigserial [pk]
+  name varchar(100)
+  type varchar(30) [note: 'NDA_LIST | CLIENT_DICT | PROJECT_CODE']
+  content text
+  updated_at timestamptz
+
+  Note: 'Future — 기밀 사전·NDA 목록. AiInspector의 RAG 검색 대상'
+}
+
+Table policy_audit {
+  audit_id bigserial [pk]
+  policy_id bigint [ref: > policy.policy_id]
+  from_version int
+  to_version int
+  changed_by bigint [ref: > app_user.user_id]
+  changed_at timestamptz
+  diff jsonb
+
+  Note: 'Future — 정책 변경 이력. 현재는 policy.version + inspection.policy_snapshot으로 시점 조회'
+}
+
+Table ai_provider_config {
+  config_id bigserial [pk]
+  provider varchar(30)
+  model varchar(100)
+  temperature numeric
+  max_tokens int
+  is_active boolean
+
+  Note: 'Future — 모델별 파라미터. 현재는 application.yml + 환경변수 (11.3 Config Isolation)'
+}

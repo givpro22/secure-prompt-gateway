@@ -1,0 +1,820 @@
+{
+  "info": {
+    "_postman_id": "a1c0f3d2-6b41-4a77-9e21-ai-gateway-v1",
+    "name": "ai-gateway-v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "사내 생성형 AI 게이트웨이 REST API. 기획서 8장 / 계약서 _workspace/01_api-ai-architect_contract-freeze.md.\n\n변수: baseUrl(기본 http://localhost:8080/api/v1), userId.\n\nMock Server Example 6개 — POST /messages에 ALLOW/MASK/BLOCK/REVIEW, GET /inspections/{id}에 PENDING/COMPLETED. 같은 URL에 Example이 여럿이면 Mock Server는 첫 Example을 반환하므로, 특정 Example이 필요하면 요청에 x-mock-response-name 헤더를 활성화한다(각 요청에 비활성 상태로 준비되어 있다).\n\nURL에 ai/mock이 없다. Mock↔LLM 교체 시 FE가 보는 URL이 불변이어야 하기 때문이다(8.1)."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "departments",
+      "description": "부서·사용자 마스터. 계정 전환 드롭다운과 감사 콘솔 필터가 쓴다.",
+      "item": [
+        {
+          "name": "GET /departments — 부서 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 부서 4건",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/departments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "departments"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"items\": [\n    {\n      \"deptId\": 1,\n      \"code\": \"DEV\",\n      \"name\": \"개발팀\"\n    },\n    {\n      \"deptId\": 2,\n      \"code\": \"SALES\",\n      \"name\": \"영업팀\"\n    },\n    {\n      \"deptId\": 3,\n      \"code\": \"HR\",\n      \"name\": \"인사팀\"\n    },\n    {\n      \"deptId\": 4,\n      \"code\": \"INFOSEC\",\n      \"name\": \"정보보안팀\"\n    }\n  ],\n  \"page\": 0,\n  \"size\": 4,\n  \"total\": 4\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /users — 사용자 목록 (계정 전환용)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?deptId=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "deptId",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 영업팀 1명 (deptId=2)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users?deptId=2",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "deptId",
+                      "value": "2"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"items\": [\n    {\n      \"userId\": 2,\n      \"name\": \"김OO\",\n      \"email\": \"kim@example.com\",\n      \"role\": \"EMPLOYEE\",\n      \"department\": {\n        \"deptId\": 2,\n        \"code\": \"SALES\",\n        \"name\": \"영업팀\"\n      }\n    }\n  ],\n  \"page\": 0,\n  \"size\": 1,\n  \"total\": 1\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "policies",
+      "description": "부서에 적용되는 정책과 규칙. deptId 필수. pattern은 응답에 포함하지 않는다.",
+      "item": [
+        {
+          "name": "GET /policies?deptId= — 부서 적용 정책",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/policies?deptId=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "policies"
+              ],
+              "query": [
+                {
+                  "key": "deptId",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 영업팀 (P-PII, P-SEC, P-CONF)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/policies?deptId=2",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "policies"
+                  ],
+                  "query": [
+                    {
+                      "key": "deptId",
+                      "value": "2"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"items\": [\n    {\n      \"policyId\": 1,\n      \"code\": \"P-PII\",\n      \"name\": \"개인정보 보호\",\n      \"category\": \"PII\",\n      \"version\": 3,\n      \"scope\": \"GLOBAL\",\n      \"appliedVia\": \"GLOBAL\",\n      \"rules\": [\n        {\n          \"ruleId\": 2,\n          \"code\": \"PII-CARD-02\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"MASK\",\n          \"maskLabel\": \"[카드번호]\",\n          \"severity\": \"HIGH\",\n          \"obligation\": \"LEGAL\",\n          \"source\": \"개인정보보호법\",\n          \"description\": \"신용카드 번호 형식 탐지\"\n        },\n        {\n          \"ruleId\": 1,\n          \"code\": \"PII-RRN-01\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"MASK\",\n          \"maskLabel\": \"[주민번호]\",\n          \"severity\": \"HIGH\",\n          \"obligation\": \"LEGAL\",\n          \"source\": \"개인정보보호법 제24조\",\n          \"description\": \"주민등록번호 형식 탐지\"\n        },\n        {\n          \"ruleId\": 3,\n          \"code\": \"PII-PHONE-03\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"MASK\",\n          \"maskLabel\": \"[전화번호]\",\n          \"severity\": \"MEDIUM\",\n          \"obligation\": \"LEGAL\",\n          \"source\": \"개인정보보호법\",\n          \"description\": \"휴대전화 번호 형식 탐지\"\n        },\n        {\n          \"ruleId\": 4,\n          \"code\": \"PII-EMAIL-04\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"MASK\",\n          \"maskLabel\": \"[이메일]\",\n          \"severity\": \"LOW\",\n          \"obligation\": \"LEGAL\",\n          \"source\": \"개인정보보호법\",\n          \"description\": \"이메일 주소 형식 탐지\"\n        }\n      ]\n    },\n    {\n      \"policyId\": 2,\n      \"code\": \"P-SEC\",\n      \"name\": \"자격증명·인프라 정보 보호\",\n      \"category\": \"SECRET\",\n      \"version\": 7,\n      \"scope\": \"GLOBAL\",\n      \"appliedVia\": \"GLOBAL\",\n      \"rules\": [\n        {\n          \"ruleId\": 5,\n          \"code\": \"SEC-AWSKEY-01\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"BLOCK\",\n          \"maskLabel\": null,\n          \"severity\": \"HIGH\",\n          \"obligation\": \"INTERNAL\",\n          \"source\": \"정보보안규정 4.2\",\n          \"description\": \"AWS 액세스 키 ID 탐지\"\n        },\n        {\n          \"ruleId\": 6,\n          \"code\": \"SEC-DBURL-02\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"BLOCK\",\n          \"maskLabel\": null,\n          \"severity\": \"HIGH\",\n          \"obligation\": \"INTERNAL\",\n          \"source\": \"정보보안규정 4.2\",\n          \"description\": \"DB 접속 문자열 탐지\"\n        },\n        {\n          \"ruleId\": 7,\n          \"code\": \"SEC-PRIVIP-03\",\n          \"ruleType\": \"REGEX\",\n          \"action\": \"MASK\",\n          \"maskLabel\": \"[내부IP]\",\n          \"severity\": \"MEDIUM\",\n          \"obligation\": \"INTERNAL\",\n          \"source\": \"정보보안규정 4.3\",\n          \"description\": \"사설 IP 대역 탐지\"\n        }\n      ]\n    },\n    {\n      \"policyId\": 3,\n      \"code\": \"P-CONF\",\n      \"name\": \"고객사 프로젝트 정보 통제\",\n      \"category\": \"CONFIDENTIAL\",\n      \"version\": 2,\n      \"scope\": \"DEPT\",\n      \"appliedVia\": \"DEPT\",\n      \"rules\": [\n        {\n          \"ruleId\": 8,\n          \"code\": \"CONF-CLIENT-01\",\n          \"ruleType\": \"KEYWORD\",\n          \"action\": \"REVIEW\",\n          \"maskLabel\": null,\n          \"severity\": \"MEDIUM\",\n          \"obligation\": \"INTERNAL\",\n          \"source\": \"고객사 NDA 목록 v3\",\n          \"description\": \"고객사명·프로젝트명 언급 시 검토\"\n        }\n      ]\n    }\n  ],\n  \"page\": 0,\n  \"size\": 3,\n  \"total\": 3\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "messages",
+      "description": "프롬프트 제출 → 규칙 판정. 판정에 따라 200/202/403으로 갈린다. 201은 쓰지 않는다 — 주 정보가 생성 사실이 아니라 판정 결과이고, BLOCK을 201로 표현할 방법이 없다(0.5 D4).",
+      "item": [
+        {
+          "name": "POST /messages — 프롬프트 제출",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-mock-response-name",
+                "value": "BLOCK (403) — Case A",
+                "disabled": true,
+                "description": "Postman Mock Server에서 특정 Example을 선택할 때만 활성화한다"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"이 에러 좀 봐줘. DB_URL=postgres://admin:p%40ss@10.0.3.21/prod 로 붙었는데 담당자 주민번호 900101-1234567 기준으로 조회하면 타임아웃 나\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "BLOCK (403) — Case A",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-User-Id",
+                    "value": "1",
+                    "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-mock-response-name",
+                    "value": "BLOCK (403) — Case A",
+                    "disabled": true,
+                    "description": "Postman Mock Server에서 특정 Example을 선택할 때만 활성화한다"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/messages",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "messages"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"이 에러 좀 봐줘. DB_URL=postgres://admin:p%40ss@10.0.3.21/prod 로 붙었는데 담당자 주민번호 900101-1234567 기준으로 조회하면 타임아웃 나\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"messageId\": 1041,\n  \"inspectionId\": 2088,\n  \"decision\": \"BLOCK\",\n  \"status\": \"BLOCKED\",\n  \"submittedText\": null,\n  \"policySnapshot\": {\n    \"policies\": [\n      {\n        \"policyId\": 1,\n        \"code\": \"P-PII\",\n        \"version\": 3,\n        \"ruleCodes\": [\n          \"PII-CARD-02\",\n          \"PII-EMAIL-04\",\n          \"PII-PHONE-03\",\n          \"PII-RRN-01\"\n        ]\n      },\n      {\n        \"policyId\": 2,\n        \"code\": \"P-SEC\",\n        \"version\": 7,\n        \"ruleCodes\": [\n          \"SEC-AWSKEY-01\",\n          \"SEC-DBURL-02\",\n          \"SEC-PRIVIP-03\"\n        ]\n      }\n    ]\n  },\n  \"ruleResult\": {\n    \"matches\": [\n      {\n        \"code\": \"SEC-DBURL-02\",\n        \"category\": \"SECRET\",\n        \"action\": \"BLOCK\",\n        \"span\": [\n          18,\n          56\n        ],\n        \"matchedKeyword\": null,\n        \"severity\": \"HIGH\",\n        \"obligation\": \"INTERNAL\",\n        \"source\": \"정보보안규정 4.2\"\n      },\n      {\n        \"code\": \"PII-RRN-01\",\n        \"category\": \"PII\",\n        \"action\": \"MASK\",\n        \"span\": [\n          73,\n          87\n        ],\n        \"matchedKeyword\": null,\n        \"severity\": \"HIGH\",\n        \"obligation\": \"LEGAL\",\n        \"source\": \"개인정보보호법 제24조\"\n      }\n    ],\n    \"appliedRuleCodes\": [\n      \"PII-CARD-02\",\n      \"PII-RRN-01\",\n      \"SEC-AWSKEY-01\",\n      \"SEC-DBURL-02\",\n      \"PII-PHONE-03\",\n      \"SEC-PRIVIP-03\",\n      \"PII-EMAIL-04\"\n    ]\n  },\n  \"aiStatus\": \"SKIPPED\",\n  \"decidedBy\": \"RULE\",\n  \"pollAfterMs\": null,\n  \"createdAt\": \"2026-09-03T05:31:12Z\"\n}"
+            },
+            {
+              "name": "MASK (200)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-User-Id",
+                    "value": "3",
+                    "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-mock-response-name",
+                    "value": "MASK (200)",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/messages",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "messages"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"고객 연락처 010-1234-5678 로 회신 요청\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"messageId\": 1042,\n  \"inspectionId\": 2089,\n  \"decision\": \"MASK\",\n  \"status\": \"MASKED\",\n  \"submittedText\": \"고객 연락처 [전화번호] 로 회신 요청\",\n  \"policySnapshot\": {\n    \"policies\": [\n      {\n        \"policyId\": 1,\n        \"code\": \"P-PII\",\n        \"version\": 3,\n        \"ruleCodes\": [\n          \"PII-CARD-02\",\n          \"PII-EMAIL-04\",\n          \"PII-PHONE-03\",\n          \"PII-RRN-01\"\n        ]\n      },\n      {\n        \"policyId\": 2,\n        \"code\": \"P-SEC\",\n        \"version\": 7,\n        \"ruleCodes\": [\n          \"SEC-AWSKEY-01\",\n          \"SEC-DBURL-02\",\n          \"SEC-PRIVIP-03\"\n        ]\n      },\n      {\n        \"policyId\": 3,\n        \"code\": \"P-CONF\",\n        \"version\": 2,\n        \"ruleCodes\": [\n          \"CONF-CLIENT-01\"\n        ]\n      }\n    ]\n  },\n  \"ruleResult\": {\n    \"matches\": [\n      {\n        \"code\": \"PII-PHONE-03\",\n        \"category\": \"PII\",\n        \"action\": \"MASK\",\n        \"span\": [\n          7,\n          20\n        ],\n        \"matchedKeyword\": null,\n        \"severity\": \"MEDIUM\",\n        \"obligation\": \"LEGAL\",\n        \"source\": \"개인정보보호법\"\n      }\n    ],\n    \"appliedRuleCodes\": [\n      \"PII-CARD-02\",\n      \"PII-RRN-01\",\n      \"SEC-AWSKEY-01\",\n      \"SEC-DBURL-02\",\n      \"PII-PHONE-03\",\n      \"SEC-PRIVIP-03\",\n      \"PII-EMAIL-04\",\n      \"CONF-CLIENT-01\"\n    ]\n  },\n  \"aiStatus\": \"SKIPPED\",\n  \"decidedBy\": \"RULE\",\n  \"pollAfterMs\": null,\n  \"createdAt\": \"2026-09-03T05:31:12Z\"\n}"
+            },
+            {
+              "name": "REVIEW (202) — Case B",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-User-Id",
+                    "value": "2",
+                    "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-mock-response-name",
+                    "value": "REVIEW (202) — Case B",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/messages",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "messages"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Location",
+                  "value": "/api/v1/inspections/2090"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"messageId\": 1043,\n  \"inspectionId\": 2090,\n  \"decision\": \"PENDING\",\n  \"status\": \"PENDING_REVIEW\",\n  \"submittedText\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\",\n  \"policySnapshot\": {\n    \"policies\": [\n      {\n        \"policyId\": 1,\n        \"code\": \"P-PII\",\n        \"version\": 3,\n        \"ruleCodes\": [\n          \"PII-CARD-02\",\n          \"PII-EMAIL-04\",\n          \"PII-PHONE-03\",\n          \"PII-RRN-01\"\n        ]\n      },\n      {\n        \"policyId\": 2,\n        \"code\": \"P-SEC\",\n        \"version\": 7,\n        \"ruleCodes\": [\n          \"SEC-AWSKEY-01\",\n          \"SEC-DBURL-02\",\n          \"SEC-PRIVIP-03\"\n        ]\n      },\n      {\n        \"policyId\": 3,\n        \"code\": \"P-CONF\",\n        \"version\": 2,\n        \"ruleCodes\": [\n          \"CONF-CLIENT-01\"\n        ]\n      }\n    ]\n  },\n  \"ruleResult\": {\n    \"matches\": [\n      {\n        \"code\": \"CONF-CLIENT-01\",\n        \"category\": \"CONFIDENTIAL\",\n        \"action\": \"REVIEW\",\n        \"span\": [\n          0,\n          2\n        ],\n        \"matchedKeyword\": \"A사\",\n        \"severity\": \"MEDIUM\",\n        \"obligation\": \"INTERNAL\",\n        \"source\": \"고객사 NDA 목록 v3\"\n      }\n    ],\n    \"appliedRuleCodes\": [\n      \"PII-CARD-02\",\n      \"PII-RRN-01\",\n      \"SEC-AWSKEY-01\",\n      \"SEC-DBURL-02\",\n      \"PII-PHONE-03\",\n      \"SEC-PRIVIP-03\",\n      \"PII-EMAIL-04\",\n      \"CONF-CLIENT-01\"\n    ]\n  },\n  \"aiStatus\": \"PENDING\",\n  \"decidedBy\": null,\n  \"pollAfterMs\": 2000,\n  \"createdAt\": \"2026-09-03T05:31:12Z\"\n}"
+            },
+            {
+              "name": "ALLOW (200) — Case C",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-User-Id",
+                    "value": "1",
+                    "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-mock-response-name",
+                    "value": "ALLOW (200) — Case C",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/messages",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "messages"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"messageId\": 1044,\n  \"inspectionId\": 2091,\n  \"decision\": \"ALLOW\",\n  \"status\": \"ALLOWED\",\n  \"submittedText\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\",\n  \"policySnapshot\": {\n    \"policies\": [\n      {\n        \"policyId\": 1,\n        \"code\": \"P-PII\",\n        \"version\": 3,\n        \"ruleCodes\": [\n          \"PII-CARD-02\",\n          \"PII-EMAIL-04\",\n          \"PII-PHONE-03\",\n          \"PII-RRN-01\"\n        ]\n      },\n      {\n        \"policyId\": 2,\n        \"code\": \"P-SEC\",\n        \"version\": 7,\n        \"ruleCodes\": [\n          \"SEC-AWSKEY-01\",\n          \"SEC-DBURL-02\",\n          \"SEC-PRIVIP-03\"\n        ]\n      }\n    ]\n  },\n  \"ruleResult\": {\n    \"matches\": [],\n    \"appliedRuleCodes\": [\n      \"PII-CARD-02\",\n      \"PII-RRN-01\",\n      \"SEC-AWSKEY-01\",\n      \"SEC-DBURL-02\",\n      \"PII-PHONE-03\",\n      \"SEC-PRIVIP-03\",\n      \"PII-EMAIL-04\"\n    ]\n  },\n  \"aiStatus\": \"SKIPPED\",\n  \"decidedBy\": \"RULE\",\n  \"pollAfterMs\": null,\n  \"createdAt\": \"2026-09-03T05:31:12Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "inspections",
+      "description": "판정 상세·감사 목록·검토 확정. GET /inspections/{id}가 202 폴링 대상이다. aiStatus가 PENDING인 동안 aiAssessment는 null이고 AI findings가 없다.",
+      "item": [
+        {
+          "name": "GET /inspections/{id} — 판정 상세 (폴링)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-mock-response-name",
+                "value": "COMPLETED (200) — AI 완료",
+                "disabled": true,
+                "description": "Postman Mock Server에서 특정 Example을 선택할 때만 활성화한다"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/inspections/2090",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inspections",
+                "2090"
+              ]
+            },
+            "description": "판정 상세. 202 이후 FE가 pollAfterMs 간격으로 이 엔드포인트를 호출하며, aiStatus가 COMPLETED 또는 FAILED가 되면 폴링을 끝낸다 (0.5 D12 — 사람 확정은 재조회로 반영한다).\n\nMock Server로 폴링을 시연하려면 x-mock-response-name 헤더를 활성화하고 값을 'PENDING (200) — AI 진행 중' → 'COMPLETED (200) — AI 완료' 순서로 바꿔가며 호출한다. 값은 Example 이름과 정확히 일치해야 한다."
+          },
+          "response": [
+            {
+              "name": "PENDING (200) — AI 진행 중",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "x-mock-response-name",
+                    "value": "PENDING (200) — AI 진행 중",
+                    "disabled": true,
+                    "description": "Postman Mock Server에서 특정 Example을 선택할 때만 활성화한다"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/inspections/2090",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "inspections",
+                    "2090"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"inspectionId\": 2090,\n  \"messageId\": 1043,\n  \"phase\": \"INPUT\",\n  \"user\": {\n    \"userId\": 2,\n    \"name\": \"김OO\",\n    \"department\": \"영업팀\"\n  },\n  \"submittedText\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\",\n  \"status\": \"PENDING_REVIEW\",\n  \"policySnapshot\": {\n    \"policies\": [\n      {\n        \"policyId\": 1,\n        \"code\": \"P-PII\",\n        \"version\": 3,\n        \"ruleCodes\": [\n          \"PII-CARD-02\",\n          \"PII-EMAIL-04\",\n          \"PII-PHONE-03\",\n          \"PII-RRN-01\"\n        ]\n      },\n      {\n        \"policyId\": 2,\n        \"code\": \"P-SEC\",\n        \"version\": 7,\n        \"ruleCodes\": [\n          \"SEC-AWSKEY-01\",\n          \"SEC-DBURL-02\",\n          \"SEC-PRIVIP-03\"\n        ]\n      },\n      {\n        \"policyId\": 3,\n        \"code\": \"P-CONF\",\n        \"version\": 2,\n        \"ruleCodes\": [\n          \"CONF-CLIENT-01\"\n        ]\n      }\n    ]\n  },\n  \"ruleResult\": {\n    \"matches\": [\n      {\n        \"code\": \"CONF-CLIENT-01\",\n        \"category\": \"CONFIDENTIAL\",\n        \"action\": \"REVIEW\",\n        \"span\": [\n          0,\n          2\n        ],\n        \"matchedKeyword\": \"A사\",\n        \"severity\": \"MEDIUM\",\n        \"obligation\": \"INTERNAL\",\n        \"source\": \"고객사 NDA 목록 v3\"\n      }\n    ],\n    \"appliedRuleCodes\": [\n      \"PII-CARD-02\",\n      \"PII-RRN-01\",\n      \"SEC-AWSKEY-01\",\n      \"SEC-DBURL-02\",\n      \"PII-PHONE-03\",\n      \"SEC-PRIVIP-03\",\n      \"PII-EMAIL-04\",\n      \"CONF-CLIENT-01\"\n    ]\n  },\n  \"aiStatus\": \"PENDING\",\n  \"aiAssessment\": null,\n  \"findings\": [\n    {\n      \"findingId\": 501,\n      \"source\": \"RULE\",\n      \"code\": \"CONF-CLIENT-01\",\n      \"category\": \"CONFIDENTIAL\",\n      \"spanStart\": 0,\n      \"spanEnd\": 2,\n      \"action\": \"REVIEW\",\n      \"rationale\": null,\n      \"evidence\": null,\n      \"reviewStatus\": \"CONFIRMED\",\n      \"reviewedBy\": null,\n      \"reviewedAt\": null\n    }\n  ],\n  \"finalDecision\": \"PENDING\",\n  \"decidedBy\": null,\n  \"createdAt\": \"2026-09-03T05:33:40Z\",\n  \"completedAt\": null\n}"
+            },
+            {
+              "name": "COMPLETED (200) — AI 완료",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "x-mock-response-name",
+                    "value": "COMPLETED (200) — AI 완료",
+                    "disabled": true,
+                    "description": "Postman Mock Server에서 특정 Example을 선택할 때만 활성화한다"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/inspections/2090",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "inspections",
+                    "2090"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"inspectionId\": 2090,\n  \"messageId\": 1043,\n  \"phase\": \"INPUT\",\n  \"user\": {\n    \"userId\": 2,\n    \"name\": \"김OO\",\n    \"department\": \"영업팀\"\n  },\n  \"submittedText\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\",\n  \"status\": \"PENDING_REVIEW\",\n  \"policySnapshot\": {\n    \"policies\": [\n      {\n        \"policyId\": 1,\n        \"code\": \"P-PII\",\n        \"version\": 3,\n        \"ruleCodes\": [\n          \"PII-CARD-02\",\n          \"PII-EMAIL-04\",\n          \"PII-PHONE-03\",\n          \"PII-RRN-01\"\n        ]\n      },\n      {\n        \"policyId\": 2,\n        \"code\": \"P-SEC\",\n        \"version\": 7,\n        \"ruleCodes\": [\n          \"SEC-AWSKEY-01\",\n          \"SEC-DBURL-02\",\n          \"SEC-PRIVIP-03\"\n        ]\n      },\n      {\n        \"policyId\": 3,\n        \"code\": \"P-CONF\",\n        \"version\": 2,\n        \"ruleCodes\": [\n          \"CONF-CLIENT-01\"\n        ]\n      }\n    ]\n  },\n  \"ruleResult\": {\n    \"matches\": [\n      {\n        \"code\": \"CONF-CLIENT-01\",\n        \"category\": \"CONFIDENTIAL\",\n        \"action\": \"REVIEW\",\n        \"span\": [\n          0,\n          2\n        ],\n        \"matchedKeyword\": \"A사\",\n        \"severity\": \"MEDIUM\",\n        \"obligation\": \"INTERNAL\",\n        \"source\": \"고객사 NDA 목록 v3\"\n      }\n    ],\n    \"appliedRuleCodes\": [\n      \"PII-CARD-02\",\n      \"PII-RRN-01\",\n      \"SEC-AWSKEY-01\",\n      \"SEC-DBURL-02\",\n      \"PII-PHONE-03\",\n      \"SEC-PRIVIP-03\",\n      \"PII-EMAIL-04\",\n      \"CONF-CLIENT-01\"\n    ]\n  },\n  \"aiStatus\": \"COMPLETED\",\n  \"aiAssessment\": {\n    \"riskCandidates\": [\n      {\n        \"code\": \"CONF-CLIENT-PROJECT\",\n        \"category\": \"CONFIDENTIAL\",\n        \"rationale\": \"'A사 차세대 프로젝트 오픈 일정'이라는 서술이 계약 상대방과 미공개 일정을 동시에 특정함\",\n        \"evidence\": [\n          {\n            \"source\": \"고객사 NDA 목록 v3\",\n            \"excerpt\": \"A사 — 비밀유지 2027.03까지, 일정·범위 포함\"\n          }\n        ]\n      }\n    ],\n    \"missingContext\": [\n      \"해당 일정이 대외 공개된 정보인지 확인 필요\"\n    ],\n    \"reviewRequired\": true\n  },\n  \"findings\": [\n    {\n      \"findingId\": 501,\n      \"source\": \"RULE\",\n      \"code\": \"CONF-CLIENT-01\",\n      \"category\": \"CONFIDENTIAL\",\n      \"spanStart\": 0,\n      \"spanEnd\": 2,\n      \"action\": \"REVIEW\",\n      \"rationale\": null,\n      \"evidence\": null,\n      \"reviewStatus\": \"CONFIRMED\",\n      \"reviewedBy\": null,\n      \"reviewedAt\": null\n    },\n    {\n      \"findingId\": 502,\n      \"source\": \"AI\",\n      \"code\": \"CONF-CLIENT-PROJECT\",\n      \"category\": \"CONFIDENTIAL\",\n      \"spanStart\": null,\n      \"spanEnd\": null,\n      \"action\": null,\n      \"rationale\": \"'A사 차세대 프로젝트 오픈 일정'이라는 서술이 계약 상대방과 미공개 일정을 동시에 특정함\",\n      \"evidence\": [\n        {\n          \"source\": \"고객사 NDA 목록 v3\",\n          \"excerpt\": \"A사 — 비밀유지 2027.03까지, 일정·범위 포함\"\n        }\n      ],\n      \"reviewStatus\": \"SUGGESTED\",\n      \"reviewedBy\": null,\n      \"reviewedAt\": null\n    }\n  ],\n  \"finalDecision\": \"PENDING\",\n  \"decidedBy\": null,\n  \"createdAt\": \"2026-09-03T05:33:40Z\",\n  \"completedAt\": \"2026-09-03T05:33:43Z\"\n}"
+            },
+            {
+              "name": "404 존재하지 않는 inspection",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/inspections/999999",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "inspections",
+                    "999999"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": \"INSPECTION_NOT_FOUND\",\n  \"message\": \"존재하지 않는 inspection입니다: 999999\",\n  \"details\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /inspections — 감사 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inspections?deptId=&status=&from=&to=&page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inspections"
+              ],
+              "query": [
+                {
+                  "key": "deptId",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "from",
+                  "value": ""
+                },
+                {
+                  "key": "to",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 목록",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/inspections?deptId=&status=&from=&to=&page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "inspections"
+                  ],
+                  "query": [
+                    {
+                      "key": "deptId",
+                      "value": ""
+                    },
+                    {
+                      "key": "status",
+                      "value": ""
+                    },
+                    {
+                      "key": "from",
+                      "value": ""
+                    },
+                    {
+                      "key": "to",
+                      "value": ""
+                    },
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"items\": [\n    { \"inspectionId\": 2090, \"createdAt\": \"2026-09-03T05:33:40Z\", \"department\": \"영업팀\", \"userName\": \"김OO\",\n      \"status\": \"PENDING_REVIEW\", \"ruleCount\": 1, \"aiStatus\": \"COMPLETED\", \"decidedBy\": null },\n    { \"inspectionId\": 2089, \"createdAt\": \"2026-09-03T05:32:10Z\", \"department\": \"개발팀\", \"userName\": \"이OO\",\n      \"status\": \"MASKED\", \"ruleCount\": 1, \"aiStatus\": \"SKIPPED\", \"decidedBy\": \"RULE\" }\n  ],\n  \"page\": 0, \"size\": 20, \"total\": 137\n}"
+            }
+          ]
+        },
+        {
+          "name": "PATCH /inspections/{id}/findings/{findingId} — AI 후보 확정",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/inspections/2090/findings/502",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inspections",
+                "2090",
+                "findings",
+                "502"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reviewStatus\": \"ACCEPTED\",\n  \"comment\": \"NDA 대상 고객사 일정. 전송 불가\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 ACCEPT → BLOCKED",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-User-Id",
+                    "value": "4",
+                    "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/inspections/2090/findings/502",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "inspections",
+                    "2090",
+                    "findings",
+                    "502"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reviewStatus\": \"ACCEPTED\",\n  \"comment\": \"NDA 대상 고객사 일정. 전송 불가\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"findingId\": 502,\n  \"reviewStatus\": \"ACCEPTED\",\n  \"reviewedBy\": {\n    \"userId\": 4,\n    \"name\": \"박OO\"\n  },\n  \"reviewedAt\": \"2026-09-03T05:40:02Z\",\n  \"inspection\": {\n    \"inspectionId\": 2090,\n    \"finalDecision\": \"BLOCK\",\n    \"decidedBy\": \"HUMAN\",\n    \"status\": \"BLOCKED\",\n    \"submittedText\": \"A사 차세대 프로젝트 오픈 일정이 언제였지?\",\n    \"completedAt\": \"2026-09-03T05:40:02Z\"\n  }\n}"
+            },
+            {
+              "name": "409 이미 처리된 finding",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-User-Id",
+                    "value": "4",
+                    "description": "현재 사용자. 기획서 8.1 — 인증 없이 계정 전환 드롭다운 값을 전달한다"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/inspections/2090/findings/502",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "inspections",
+                    "2090",
+                    "findings",
+                    "502"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reviewStatus\": \"ACCEPTED\",\n  \"comment\": \"NDA 대상 고객사 일정. 전송 불가\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": \"FINDING_ALREADY_REVIEWED\",\n  \"message\": \"finding 502는 이미 ACCEPTED 상태입니다.\",\n  \"details\": null\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
