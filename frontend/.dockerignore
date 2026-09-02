@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.vite/
+# 로컬 빌드용 값(localhost:8080)이 들어 있다. 컨테이너 빌드는 ARG VITE_API_BASE만 쓴다
+.env.production
