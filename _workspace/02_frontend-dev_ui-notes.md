@@ -204,7 +204,7 @@ cd frontend && npm run dev:fixtures     # http://localhost:5173, /api/v1을 자�
 
 - `vite.config.js`가 `VITE_FIXTURES=1`일 때만 플러그인을 등록한다. `apply: 'serve'`라 **프로덕션 번들에 들어가지 않는다.**
 - 애플리케이션 코드는 이 파일을 import하지 않는다. 앱에는 목 분기가 한 줄도 없다.
-- 판정 로직은 기획서 7.2 규칙 8종 정규식 + D1 중첩 억제 + D5 마스킹 분기 + D9 규칙당 1건을 그대로 흉내 낸다. AI는 `ai.mock.delay-ms` 2500ms 지연 후 Case B 픽스처를 돌려준다.
+- 판정 로직은 기획서 7.2 규칙 10종 + D1 중첩 억제 + D5 마스킹 분기 + D9 규칙당 1건 + D20 엠바고 만료 제외를 그대로 흉내 낸다. 엠바고 기준일은 `GATEWAY_EMBARGO_REFERENCE_DATE`로 백엔드와 같은 환경변수를 읽는다. AI는 `ai.mock.delay-ms` 2500ms 지연 후 Case B 픽스처를 돌려준다.
 - 응답 shape은 **Postman Example이 아니라 계약서 §1 표**를 기준으로 만들었다. Example이 축약본이기 때문이다 (§7-1).
 
 실제 BE 검증을 마친 뒤에도 이 경로는 남겨 둔다. BE가 내려가 있거나 DB 없이 화면만 볼 때 `npm run dev:fixtures` 한 줄로 데모 4종이 그대로 돈다. 픽스처의 판정 결과가 실제 BE와 어긋나면 그것 자체가 신호이므로, 두 모드에서 같은 40건을 돌려 일치를 확인했다.
