@@ -17,6 +17,10 @@ services:
     restart: unless-stopped
 
   backend:
+    # GitHub Actions가 밀어 넣은 이미지를 서버는 받기만 한다 (.github/workflows/ci-cd.yml).
+    # 로컬에서 `docker compose build`를 하면 같은 이름으로 태깅되므로 이 파일 하나로
+    # 개발과 배포를 겸한다. 롤백은 IMAGE_TAG=<커밋 SHA> docker compose up -d.
+    image: ghcr.io/givpro22/secure-prompt-gateway-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
     environment:
@@ -33,6 +37,7 @@ services:
     restart: unless-stopped
 
   frontend:
+    image: ghcr.io/givpro22/secure-prompt-gateway-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       args:

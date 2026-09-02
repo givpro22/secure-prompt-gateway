@@ -86,6 +86,8 @@ AWS EC2(ap-northeast-2, t3.micro) 한 대에 Docker Compose로 올립니다. 컨
 | Swagger UI | http://15.164.215.132/swagger-ui/index.html |
 | API base | http://15.164.215.132/api/v1 |
 
+`main`에 푸시하면 GitHub Actions가 자동으로 배포합니다 (아래 CI/CD). 다음은 인스턴스를 처음 세팅할 때만 필요한 절차입니다.
+
 ```bash
 git clone https://github.com/givpro22/secure-prompt-gateway.git
 cd secure-prompt-gateway
@@ -95,6 +97,44 @@ docker compose logs -f backend      # "Started GatewayApplication"
 ```
 
 재배포는 `git pull && docker compose up -d --build`입니다. DB는 `db-data` 볼륨에 남으므로 판정 이력이 유지됩니다. 초기 시드 상태로 되돌리려면 `docker compose down -v`로 볼륨을 비웁니다.
+
+### CI/CD
+
+`.github/workflows/ci-cd.yml` 하나가 검증과 배포를 모두 맡습니다.
+
+| 트리거 | 하는 일 |
+|---|---|
+| PR | 백엔드 테스트(Postgres 서비스 컨테이너) + 프론트 빌드 |
+| `main` 푸시 | 위 검증 → GHCR 이미지 빌드·푸시 → EC2 배포 → 헬스 체크 |
+| 수동 실행 | `Actions` 탭에서 `Run workflow` |
+
+**빌드는 러너가, 서버는 pull만 합니다.** t3.micro에서 Gradle과 npm 빌드를 돌리면 스왑까지 써도 OOM으로 죽기 때문에, 이미지를 GHCR(`ghcr.io/givpro22/secure-prompt-gateway-{backend,frontend}`)에 올리고 EC2는 `docker compose pull && up -d`만 합니다. 배포 자체는 30초대에 끝납니다.
+
+테스트는 `@SpringBootTest`라 실제 DB가 필요합니다. 러너에 `postgres:16` 서비스 컨테이너를 `55432`로 띄워 `application.yml` 기본값을 그대로 쓰므로 테스트 전용 설정 파일이 없습니다. 데모 케이스 4종이 여기서 검증되니, 이 워크플로가 빨간색이면 발표가 위험한 상태입니다.
+
+**최초 1회 설정** — 저장소 `Settings → Secrets and variables → Actions`에 시크릿 2개를 등록합니다.
+
+| 시크릿 | 값 |
+|---|---|
+| `EC2_HOST` | `15.164.215.132` |
+| `EC2_SSH_KEY` | `gateway-key.pem` 파일 내용 전체 (`-----BEGIN`부터 `-----END`까지) |
+
+`gh` CLI를 쓴다면 두 줄입니다.
+
+```bash
+gh secret set EC2_HOST --body "15.164.215.132"
+gh secret set EC2_SSH_KEY < ~/.ssh/gateway-key.pem
+```
+
+GHCR 패키지는 private으로 두어도 됩니다 — 배포 스텝이 `GITHUB_TOKEN`으로 서버에서 로그인한 뒤 곧바로 로그아웃합니다.
+
+**롤백**은 서버에서 태그만 바꿔 다시 올립니다. 이미지는 커밋 SHA로도 태깅됩니다.
+
+```bash
+IMAGE_TAG=<되돌릴 커밋 SHA> docker compose up -d
+```
+
+배포 스텝은 서버에서 `git reset --hard origin/main`을 실행합니다. `.env`는 추적 대상이 아니라 그대로 남지만, 서버에서 직접 고친 추적 파일은 덮어써집니다.
 
 ### 구성 메모
 
