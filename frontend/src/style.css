@@ -1,0 +1,95 @@
+/*
+ * 색상 토큰 — 기획서 5.2 표 8종. 정의는 이 파일 한 곳뿐이다.
+ * 컴포넌트에서 hex를 직접 쓰면 판정 상태별 색이 어긋난다.
+ */
+:root {
+  --navy: #16202e;
+  --blue: #2f5d8a;
+  --red: #c2452d;
+  --amber: #b7791f;
+  --purple: #5b4b8a;
+  --green: #2e7d5b;
+  --gray: #6b7280;
+  --card: #f4f6f9;
+
+  /* 위 8종에서 파생된 값. 새 색을 만들지 않는다 */
+  --page-bg: #ffffff;
+  --border: #dfe4ec;
+  --border-strong: #c6cddb;
+
+  --font-body: 14px;
+  --font-caption: 12px;
+  --header-h: 56px;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Pretendard, 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-size: var(--font-body);
+  line-height: 1.6;
+  color: var(--navy);
+  background: var(--page-bg);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* 마스킹 하이라이트 — MaskedText.vue가 삽입하는 <mark> */
+mark {
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  color: var(--amber);
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* 공통 소품 */
+.caption {
+  font-size: var(--font-caption);
+  color: var(--gray);
+}
+
+.section-title {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--gray);
+  text-transform: none;
+  margin: 0 0 8px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
