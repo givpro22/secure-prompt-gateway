@@ -157,9 +157,15 @@ const baseDate = computed(() => {
   background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 
+/*
+ * 홑화살괄호는 글꼴 상자 안에서 아래로 치우쳐 앉는다. 글자와 baseline을 맞추면
+ * 눈에는 낮아 보이므로, 가운데 정렬한 뒤 광학적으로 조금 끌어올린다.
+ */
 .arrow {
+  display: block;
   font-size: 24px;
   line-height: 1;
+  transform: translateY(-1.5px);
 }
 
 .rail-head {

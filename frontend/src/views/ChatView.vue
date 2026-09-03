@@ -200,9 +200,12 @@ async function send() {
 
     // 보냈으니 더 이상 작성 중이 아니다.
     thread.setWriting(null)
-    // "이번 세션"은 **직접 입력해 답변을 받은 것**만 센다. 데모 대화를 열어보는 것은
-    // 지난 대화를 훑는 행동이지 내가 이번에 한 일이 아니다.
-    if (!replaying.value) thread.addTurn(text, verdict.decision)
+    /*
+     * 데모 재생도 세션 판정을 채운다. 예전에는 "직접 입력한 것만 센다"고 건너뛰었는데,
+     * 데모가 목록의 세션이 된 뒤로는 그러면 판정이 null로 남는다 — 점 색이 비고,
+     * 검토 대기인 대화가 지워진다. 알림만 건너뛴다(아래).
+     */
+    thread.addTurn(text, verdict.decision)
     // 판정은 알림함에도 한 줄 남는다. 데모 대화를 훑는 것은 내가 이번에 한 일이 아니다.
     if (!replaying.value) {
       notifications.push(session.currentUserId, notificationFromVerdict(verdict))
