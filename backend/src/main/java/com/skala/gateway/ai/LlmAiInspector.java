@@ -34,7 +34,7 @@ import com.skala.gateway.config.AiProperties;
  * 것은 마스킹본이라 좌표계가 다르다. 같은 컬럼에 섞으면 하이라이트가 조용히 밀린다. 근거 문장은
  * {@code evidence.excerpt}로 넘기고 화면은 D3와 같은 방식(문자열 검색)으로 처리한다.
  *
- * <p>홀드아웃 111문장 F1 0.892 · 오탐 1.5% (`_workspace/golden/`). 개발셋 326문장 F1 0.972.
+ * <p>홀드아웃 111문장 F1 0.925 · 오탐 1.5% (`_workspace/golden/`). 개발셋 326문장 F1 0.972.
  */
 @Component
 @Profile("llm")
