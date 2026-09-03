@@ -899,8 +899,9 @@ export function fixtureServer() {
               const synthetic = looksLikeCode
                 ? `문제가 될 만한 곳을 고쳤습니다.\n\n${masked.split('\n').filter((l) => /[;{}()]/.test(l)).join('\n')}\n\nnull 가능성이 있는 값은 기본값으로 막았습니다.`
                 // 일반 질문은 깨끗하게 답한다 — 시연 기본 경로는 통과다. 유출 의심은 코드 질문(되돌림)으로 보인다.
-                : `요청하신 내용을 정리했습니다.\n\n"${masked}"\n\n` +
-                  `대괄호로 가려진 부분은 그대로 두었습니다. 더 필요한 항목이 있으면 말씀해 주세요.`
+                // 질문을 그대로 인용하지 않는다 — 인용하면 코드 되돌림 검사(40자)에 걸려 깨끗한 질문도
+                // 검토 대기가 된다. 실제 모델은 질문을 따옴표로 되읽지 않는다.
+                : `요청하신 내용을 정리했습니다.\n\n1. 핵심 항목을 먼저 두고 세부는 뒤에 붙였습니다.\n2. 대괄호로 가려진 부분은 그대로 두었습니다.\n3. 더 필요한 항목이 있으면 말씀해 주세요.`
               const out = state.createResponseInspection(source, synthetic)
               const verdict = {
                 messageId, inspectionId: out.inspectionId, decision: out.finalDecision,
