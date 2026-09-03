@@ -42,12 +42,13 @@ const ruleCount = computed(() =>
     </div>
 
     <div class="status">
-      <span class="pill live">
+      <span class="live">
         <span class="dot" aria-hidden="true" />
         게이트웨이 보호 활성
       </span>
-      <span v-if="session.policiesLoaded" class="pill">
-        정책 {{ session.policies.length }} · 규칙 {{ ruleCount }}종
+      <span v-if="session.policiesLoaded" class="meta">
+        적용 정책 <strong>{{ session.policies.length }}</strong> · 규칙
+        <strong>{{ ruleCount }}</strong>종
       </span>
     </div>
   </header>
@@ -58,47 +59,52 @@ const ruleCount = computed(() =>
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
   flex-wrap: wrap;
-  padding: 16px 22px;
-  border-bottom: 1px solid var(--border);
+  padding: 22px 30px;
+  border-bottom: 1px solid var(--border-strong);
   background: var(--page-bg);
 }
 
 .titles h1 {
   margin: 0;
-  font-size: 19px;
+  font-size: 25px;
+  letter-spacing: -0.02em;
   color: var(--navy);
 }
 
 .subtitle {
-  margin: 3px 0 0;
-  font-size: var(--font-caption);
+  margin: 6px 0 0;
+  font-size: 14.5px;
   color: var(--gray);
 }
 
 .status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 18px;
+  font-size: 14.5px;
 }
 
-.pill {
+/* 알약 테두리를 걷어냈다. 상태는 점과 글자로 충분하고, 둥근 배지를 늘어놓으면
+   화면이 실제 정보보다 장식처럼 읽힌다 */
+.live {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: #fff;
-  font-size: 13px;
+  gap: 8px;
+  color: var(--green);
+  font-weight: 600;
+}
+
+.meta {
+  padding-left: 18px;
+  border-left: 1px solid var(--border-strong);
   color: var(--gray);
   font-variant-numeric: tabular-nums;
 }
 
-.pill.live {
-  border-color: var(--green);
-  color: var(--green);
+.meta strong {
+  color: var(--navy);
 }
 
 .dot {

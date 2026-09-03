@@ -190,14 +190,12 @@ function token(decision) {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: 236px;
+  gap: 16px;
+  width: 258px;
   flex: none;
   height: 100%;
-  /* 계정 서브메뉴가 사이드바 밖으로 펼쳐진다. 스크롤은 안쪽 .scroll이 맡으므로
-     여기서 overflow를 막으면 서브메뉴만 잘린다. */
   overflow: visible;
-  padding: 16px 14px;
+  padding: 18px 16px;
   background: var(--nav-bg);
   color: var(--nav-fg);
 }
@@ -260,11 +258,11 @@ function token(decision) {
 }
 
 .nav-item {
-  padding: 9px 11px;
+  padding: 10px 12px;
   border-radius: 8px;
   color: var(--nav-muted);
   text-decoration: none;
-  font-size: 14.5px;
+  font-size: 15px;
 }
 
 .nav-item:hover {

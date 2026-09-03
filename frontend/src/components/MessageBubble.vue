@@ -25,10 +25,12 @@ defineProps({
 
 <style scoped>
 .bubble {
-  padding: 12px 14px;
+  padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
+  font-size: 15.5px;
+  line-height: 1.75;
 }
 
 .bubble.blocked {

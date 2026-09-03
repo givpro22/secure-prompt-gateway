@@ -363,11 +363,11 @@ function isHumanDecided(entry) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   width: 100%;
-  max-width: 880px;
+  max-width: 1040px;
   margin: 0 auto;
-  padding: 20px 16px 20px;
+  padding: 28px 28px 24px;
   height: 100%;
   min-height: 0;
 }
@@ -401,17 +401,17 @@ function isHumanDecided(entry) {
 
 .hello {
   margin: 0;
-  font-size: 29px;
+  font-size: 34px;
   font-weight: 700;
   color: var(--navy);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .empty .lead {
   margin: 0;
-  max-width: 44ch;
-  font-size: 14px;
-  line-height: 1.7;
+  max-width: 46ch;
+  font-size: 16px;
+  line-height: 1.8;
   color: var(--gray);
 }
 

@@ -441,7 +441,7 @@ dd {
   align-self: flex-start;
   padding: 7px 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 5px;
   background: var(--navy);
   color: #fff;
   font: inherit;

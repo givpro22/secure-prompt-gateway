@@ -67,72 +67,86 @@ const baseDate = computed(() => {
 </script>
 
 <template>
-  <!-- 접었을 때는 화살표와 제목만 남긴다. 띠 전체가 버튼이라 어디를 눌러도 펼쳐진다 -->
-  <aside v-if="collapsed" class="rail collapsed">
-    <button type="button" class="reopen" aria-label="알아둘 소식 펼치기" @click="collapsed = false">
-      <span class="arrow" aria-hidden="true">‹</span>
-      <span class="spine" aria-hidden="true">알아둘 소식</span>
-    </button>
-  </aside>
+  <!--
+    접힘·펼침을 v-if로 갈아끼우면 폭이 순간이동한다. aside 하나를 두고 width만
+    보간하고, 안쪽 내용은 페이드로 교차시킨다.
+  -->
+  <aside class="rail" :class="{ collapsed }">
+    <div class="panel" :aria-hidden="collapsed">
+      <div class="rail-head">
+        <h2>알아둘 소식</h2>
+        <button type="button" class="toggle" aria-label="알아둘 소식 접기" @click="collapsed = true">
+          ›
+        </button>
+      </div>
+      <p class="sub">{{ session.currentDeptName }}에 적용되는 정책에서 나온 것만 보여줍니다.</p>
 
-  <aside v-else class="rail">
-    <div class="rail-head">
-      <h2>알아둘 소식</h2>
-      <button type="button" class="toggle" aria-label="알아둘 소식 접기" @click="collapsed = true">
-        ›
-      </button>
-    </div>
-    <p class="sub">{{ session.currentDeptName }}에 적용되는 정책에서 나온 것만 보여줍니다.</p>
+      <p v-if="!session.policiesLoaded" class="loading caption">불러오는 중…</p>
 
-    <p v-if="!session.policiesLoaded" class="loading caption">불러오는 중…</p>
+      <ul v-else class="notices">
+        <li v-for="n in notices" :key="n.key" class="notice" :class="`tone-${n.tone}`">
+          <span class="head">
+            <span class="kind">{{ n.kind }}</span>
+            <span class="date">{{ n.date }}</span>
+          </span>
+          <span class="title">{{ n.title }}</span>
+          <span class="body">{{ n.body }}</span>
+          <span v-if="n.source" class="source">{{ n.source }}</span>
+        </li>
+      </ul>
 
-    <ul v-else class="notices">
-      <li v-for="n in notices" :key="n.key" class="notice" :class="`tone-${n.tone}`">
-        <span class="head">
-          <span class="kind">{{ n.kind }}</span>
-          <span class="date">{{ n.date }}</span>
+      <footer class="base">
+        <span class="base-row">
+          <span class="base-key">정책 버전</span>
+          <span class="base-val">v{{ revision }}</span>
         </span>
-        <span class="title">{{ n.title }}</span>
-        <span class="body">{{ n.body }}</span>
-        <span v-if="n.source" class="source">{{ n.source }}</span>
-      </li>
-    </ul>
+        <span v-if="baseDate" class="base-row">
+          <span class="base-key">기준일</span>
+          <span class="base-val">{{ baseDate }}</span>
+        </span>
+      </footer>
+    </div>
 
-    <footer class="base">
-      <span class="base-row">
-        <span class="base-key">정책 버전</span>
-        <span class="base-val">v{{ revision }}</span>
-      </span>
-      <span v-if="baseDate" class="base-row">
-        <span class="base-key">기준일</span>
-        <span class="base-val">{{ baseDate }}</span>
-      </span>
-    </footer>
+    <button
+      type="button"
+      class="reopen"
+      :tabindex="collapsed ? 0 : -1"
+      :aria-hidden="!collapsed"
+      @click="collapsed = false"
+    >
+      <span class="arrow" aria-hidden="true">‹</span>
+      알아둘 소식
+    </button>
   </aside>
 </template>
 
 <style scoped>
 .rail.collapsed {
-  width: 40px;
-  padding: 0;
+  /* 접으면 패널이 아니라 글자만 남는다. 배경·테두리가 남으면 본문 옆에 색 다른
+     탭이 붙은 것처럼 보인다 */
+  width: 152px;
+  background: transparent;
+  border-left-color: transparent;
 }
 
 /* 띠 전체가 버튼이다. 어디를 눌러도 펼쳐진다 */
 .reopen {
-  display: flex;
-  flex-direction: column;
+  position: absolute;
+  top: 24px;
+  left: 0;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  width: 100%;
-  height: 100%;
-  padding: 14px 0;
+  gap: 9px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--gray);
   font: inherit;
-  /* 세로쓰기는 .spine에만 준다. 버튼까지 번지면 화살표와 제목의 위아래가 뒤집힌다 */
-  writing-mode: horizontal-tb;
+  font-size: 15.5px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
 }
 
 .reopen:hover {
@@ -141,16 +155,8 @@ const baseDate = computed(() => {
 }
 
 .arrow {
-  flex: none;
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
-}
-
-.spine {
-  writing-mode: vertical-rl;
-  white-space: nowrap;
-  font-size: 13.5px;
-  letter-spacing: 0.06em;
 }
 
 .rail-head {
@@ -161,17 +167,14 @@ const baseDate = computed(() => {
 }
 
 .toggle {
+  /* 화살표만 남긴다. 테두리와 배경을 두면 그것부터 눈에 들어온다 */
   flex: none;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: #fff;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
   color: var(--gray);
   font: inherit;
-  font-size: 15px;
+  font-size: 26px;
   line-height: 1;
 }
 
@@ -181,17 +184,18 @@ const baseDate = computed(() => {
 }
 
 .rail {
-  width: 296px;
+  position: relative;
+  width: 336px;
   flex: none;
-  padding: 18px 16px;
+  padding: 24px 22px;
   border-left: 1px solid var(--border);
   background: var(--card);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* 목록이 길어져도 "정책 기준"이 잘리지 않게 레일이 스스로 스크롤한다. */
   height: 100%;
   overflow: hidden;
+  transition:
+    width 340ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    background-color 300ms ease,
+    border-left-color 300ms ease;
 }
 
 h2 {
@@ -225,8 +229,8 @@ h2 {
 .notice {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 10px 11px;
+  gap: 4px;
+  padding: 13px 14px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--gray);
   border-radius: 6px;
@@ -271,14 +275,14 @@ h2 {
 }
 
 .title {
-  font-size: 13.5px;
-  line-height: 1.45;
+  font-size: 14.5px;
+  line-height: 1.5;
   color: var(--navy);
 }
 
 .body {
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--gray);
 }
 
@@ -310,5 +314,34 @@ h2 {
 .base-val {
   color: var(--navy);
   font-weight: 600;
+}
+.panel {
+  /* 폭이 줄어드는 동안 안쪽이 다시 흐르지 않게 너비를 고정한다. 그래야 접히는 것이
+     글자가 재배치되는 게 아니라 패널이 미끄러지는 것으로 보인다 */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 292px;
+  height: 100%;
+  min-height: 0;
+  opacity: 1;
+  transition: opacity 200ms ease 90ms;
+}
+.rail.collapsed .panel {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0ms;
+}
+.rail.collapsed .reopen {
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 140ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .panel,
+  .reopen {
+    transition: none;
+  }
 }
 </style>
