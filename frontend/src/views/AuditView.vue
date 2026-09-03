@@ -55,11 +55,10 @@ function groupRows(items) {
   for (const r of items) {
     if (r.phase === 'OUTPUT') continue
     n += 1
-    out.push({ ...r, seq: n })
-    for (const a of answers.get(r.messageId) ?? []) {
-      out.push({ ...a, seq: n, isAnswer: true })
-      placed.add(a.inspectionId)
-    }
+    // 답변은 질문 행 안에 든다. 한 건의 검사가 한 항목이다 — 두 줄로 나누면 어느 질문의 답인지 잃는다.
+    const answer = (answers.get(r.messageId) ?? [])[0] ?? null
+    if (answer) placed.add(answer.inspectionId)
+    out.push({ ...r, seq: n, answer })
   }
   for (const r of items) {
     if (r.phase === 'OUTPUT' && !placed.has(r.inspectionId)) {
@@ -77,6 +76,8 @@ const listError = ref('')
 
 const selectedId = ref(null)
 const detail = ref(null)
+/** 선택한 질문에 붙은 답변 검사의 상세. 질문과 같은 패널에서 아래 절로 보여준다 */
+const answerDetail = ref(null)
 const detailLoading = ref(false)
 const detailError = ref('')
 const notice = ref('')
@@ -208,8 +209,12 @@ async function loadDetail(inspectionId) {
   notice.value = ''
   try {
     detail.value = await fetchInspection(inspectionId)
+    // 질문 행이면 붙어 있는 답변 검사도 같이 연다.
+    const row = rows.value.find((r) => r.inspectionId === inspectionId)
+    answerDetail.value = row?.answer ? await fetchInspection(row.answer.inspectionId) : null
   } catch (err) {
     detail.value = null
+    answerDetail.value = null
     detailError.value = errorText(err, '판정 상세를 불러오지 못했습니다.')
   } finally {
     detailLoading.value = false
@@ -275,6 +280,38 @@ watch(
 const humanDecided = computed(
   () => Boolean(detail.value) && detail.value.decidedBy === 'HUMAN',
 )
+
+const answerAiFindings = computed(() =>
+  (answerDetail.value?.findings ?? []).filter((f) => f.source === 'AI'),
+)
+
+/** 답변 검사의 AI 판정 확정. 질문 쪽과 같은 API, 대상 inspection만 답변 것이다 */
+async function onAnswerReview({ finding, reviewStatus }) {
+  busyFindingId.value = finding.findingId
+  notice.value = ''
+  try {
+    const result = await reviewFinding(answerDetail.value.inspectionId, finding.findingId, reviewStatus)
+    const target = answerDetail.value.findings.find((f) => f.findingId === result.findingId)
+    if (target) {
+      target.reviewStatus = result.reviewStatus
+      target.reviewedBy = result.reviewedBy
+      target.reviewedAt = result.reviewedAt
+    }
+    answerDetail.value.finalDecision = result.inspection.finalDecision
+    answerDetail.value.status = result.inspection.status
+    answerDetail.value.decidedBy = result.inspection.decidedBy
+    const row = rows.value.find((r) => r.answer?.inspectionId === answerDetail.value.inspectionId)
+    if (row?.answer) {
+      row.answer.status = result.inspection.status
+      row.answer.decidedBy = result.inspection.decidedBy
+    }
+    thread.raiseDecision(result.inspection.finalDecision)
+  } catch (err) {
+    notice.value = errorText(err, '확정에 실패했습니다.')
+  } finally {
+    busyFindingId.value = null
+  }
+}
 
 async function onReview({ finding, reviewStatus }) {
   busyFindingId.value = finding.findingId
@@ -482,6 +519,13 @@ onMounted(async () => {
                 <td class="excerpt">
                   <span v-if="row.submittedText" class="excerpt-text">{{ row.submittedText }}</span>
                   <span v-else class="excerpt-none">전송되지 않음</span>
+                  <!-- 답변은 같은 항목 안의 둘째 줄이다 (UC-08) -->
+                  <span v-if="row.answer" class="answer-line">
+                    <span class="answer-arrow" aria-hidden="true">↳</span>
+                    <span class="answer-word">답변</span>
+                    <StatusBadge :value="row.answer.status" />
+                    <span class="answer-excerpt">{{ row.answer.submittedText || '본문 없음' }}</span>
+                  </span>
                 </td>
                 <td><StatusBadge :value="row.status" /></td>
                 <td class="num">{{ row.ruleCount }}</td>
@@ -628,6 +672,35 @@ onMounted(async () => {
             </p>
           </section>
 
+          <!-- 3b. 답변 — 같은 질문에 대한 답변 검사. 질문과 한 패널에 있어야 무엇에 대한 답인지 보인다 (UC-08) -->
+          <section v-if="answerDetail" class="section answer-section">
+            <h3 class="section-title">
+              답변
+              <StatusBadge :value="answerDetail.status" />
+              <span class="caption ai-status">#{{ answerDetail.inspectionId }}</span>
+            </h3>
+            <p v-if="answerDetail.finalDecision === 'ALLOW'" class="pass-note">
+              통과 — 질문에 대한 답변에 문제 없음
+            </p>
+            <p v-else-if="answerDetail.finalDecision === 'PENDING'" class="phase-note caption">
+              원문 유출이 의심되어 확인이 필요합니다.
+            </p>
+            <p v-if="answerDetail.submittedText === null" class="empty caption">차단되어 본문이 없습니다.</p>
+            <p v-else class="body"><MaskedText :text="answerDetail.submittedText" /></p>
+
+            <h4 class="sub-title">
+              AI 판정
+              <span class="caption ai-status">{{ term(AI_STATUS_TERMS, answerDetail.aiStatus, '') }}</span>
+            </h4>
+            <AiCandidateList
+              :findings="answerAiFindings"
+              :assessment="answerDetail.aiAssessment"
+              :readonly="!canReview"
+              :busy-finding-id="busyFindingId"
+              @review="onAnswerReview"
+            />
+          </section>
+
           <!-- 4. 이력 -->
           <section class="section">
             <h3 class="section-title">이력</h3>
@@ -754,6 +827,35 @@ th {
   background: var(--card);
 }
 
+.answer-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  color: var(--gray);
+  font-size: 12.5px;
+}
+.answer-arrow {
+  color: var(--navy);
+}
+.answer-word {
+  color: var(--navy);
+  font-weight: 600;
+}
+.answer-excerpt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.answer-section {
+  border-top: 2px solid var(--border-strong, #d9dee6);
+}
+.sub-title {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--navy);
+}
 .seq {
   color: var(--gray);
   font-variant-numeric: tabular-nums;

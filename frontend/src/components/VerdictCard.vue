@@ -22,6 +22,12 @@ const props = defineProps({
   verdict: { type: Object, required: true },
   /** 작성자가 친 원문. 전송본과 다를 때만 비교해 보여준다 */
   originalText: { type: String, default: '' },
+  /**
+   * 판정이 나자마자 답변을 받아온다. 채팅이라면 보내고 나서 답이 오는 게 당연하고,
+   * 버튼을 한 번 더 누르는 건 게이트웨이가 끼어 있다는 걸 굳이 보이는 셈이다.
+   * 데모 재생은 미리 적어 둔 답이 있어 끄고, 실제로 보낸 것에만 켠다.
+   */
+  autoAnswer: { type: Boolean, default: false },
 })
 
 const matches = computed(() => {
@@ -220,6 +226,10 @@ onMounted(async () => {
     autoAnswer.value = await fetchAnswerAvailable()
   } catch {
     autoAnswer.value = { available: false, provider: '' }
+  }
+  // 나간 것(ALLOW·MASK)에만, 제공자가 켜져 있을 때만 이어서 답을 받는다.
+  if (props.autoAnswer && autoAnswer.value.available && canCheckAnswer.value) {
+    await getAnswer()
   }
 })
 

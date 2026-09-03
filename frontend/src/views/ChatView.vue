@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AiCandidateList from '../components/AiCandidateList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
 import MessageInput from '../components/MessageInput.vue'
@@ -18,6 +18,7 @@ import { DECIDED_BY_TERMS, term } from '../lib/terms'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 import { notificationFromVerdict, useNotificationStore } from '../stores/notifications'
+import { conversationCache } from '../stores/conversationCache'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -175,7 +176,7 @@ let nextKey = 1
  * 스토어가 아니라 여기 두는 이유는 entries가 판정 응답 덩어리이기 때문이다. 사이드바가
  * 읽어야 하는 요약(제목·턴 수·작성 중)만 스토어에 있고, 본문은 화면이 들고 있는다.
  */
-const convByUser = new Map()
+const convByUser = conversationCache
 
 function snapshotConversation() {
   return {
@@ -201,6 +202,11 @@ watch(
   },
   { immediate: true },
 )
+
+// 화면을 떠날 때(콘솔로 이동 등) 지금 대화를 저장한다. 안 그러면 돌아왔을 때 빈 화면이다.
+onBeforeUnmount(() => {
+  convByUser.set(session.currentUserId, snapshotConversation())
+})
 
 /** 상태 코드와 decision이 계약(§1-4)대로 대응하는지 확인한다. */
 function checkDecision(status, verdict) {
@@ -236,6 +242,8 @@ async function send() {
       inspection: null,
       aiStatus: verdict.aiStatus,
       note: '',
+      // 실제로 보낸 것인지. 데모 재생은 답을 미리 갖고 있어 자동 답변을 켜지 않는다.
+      live: !replaying.value,
     }
     entries.value.push(entry)
 
@@ -368,7 +376,7 @@ function isHumanDecided(entry) {
         -->
         <MessageBubble :text="entry.inputText" :blocked="entry.verdict.decision === 'BLOCK'" />
 
-        <VerdictCard :verdict="entry.verdict" :original-text="entry.inputText" />
+        <VerdictCard :verdict="entry.verdict" :original-text="entry.inputText" :auto-answer="entry.live" />
 
         <!-- 데모 대화의 답변. 미리 적어 둔 문장이며 모델을 부른 결과가 아니다 (0.3) -->
         <section v-if="entry.demoAnswer" class="answer">
