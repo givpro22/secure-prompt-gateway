@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import LlmPicker from './LlmPicker.vue'
+import MaskedText from './MaskedText.vue'
 import StatusBadge from './StatusBadge.vue'
 import { ACTION_TERMS, CATEGORY_TERMS, OBLIGATION_TERMS, term } from '../lib/terms'
 import { expectField } from '../lib/contract'
@@ -15,6 +16,8 @@ import { expectField } from '../lib/contract'
 const props = defineProps({
   /** POST /messages 응답 본문 (200 / 202 / 403 모두 같은 필드 집합) */
   verdict: { type: Object, required: true },
+  /** 작성자가 친 원문. 전송본과 다를 때만 비교해 보여준다 */
+  originalText: { type: String, default: '' },
 })
 
 const matches = computed(() => {
@@ -61,10 +64,21 @@ const approvedText = computed(() => {
  * 본문을 URL 쿼리에 실어 보내지 않는 것은 의도다. 게이트웨이가 승인한 본문이라도
  * 주소창·브라우저 기록·리퍼러에 남기면 통제한 경로 밖으로 한 번 더 새는 셈이다.
  */
+/*
+ * 전송본이 원문과 달라졌을 때만 따로 보여준다. 허용은 둘이 같아서 한 번 더 그리면
+ * 같은 문장이 두 번 나오는 소음이 된다.
+ */
+const changedText = computed(() => {
+  const sent = props.verdict.submittedText
+  if (!sent || sent === props.originalText) return null
+  return sent
+})
+
 const EXTERNAL_LLMS = [
   { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/' },
   { id: 'claude', name: 'Claude', url: 'https://claude.ai/new' },
   { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app' },
+  { id: 'grok', name: 'Grok', url: 'https://grok.com/' },
 ]
 
 const copied = ref(false)
@@ -141,8 +155,14 @@ const summary = computed(() => {
       차단된 항목을 제거하거나 대체한 뒤 다시 전송하세요. 입력창에 방금 입력한 내용이 그대로 남아 있습니다.
     </p>
     <p v-if="isMask" class="hint">
-      탐지된 개인정보를 라벨로 치환한 본문만 전송되었습니다. 위 발화에 표시된 노란 라벨이 치환 구간입니다.
+      탐지된 개인정보를 라벨로 치환한 본문만 전송되었습니다.
     </p>
+
+    <!-- 원문은 위 버블에 그대로 있고, 실제로 나간 본문은 여기에 있다 -->
+    <div v-if="changedText" class="sent">
+      <span class="sent-label">실제 전송된 본문</span>
+      <p class="sent-body"><MaskedText :text="changedText" /></p>
+    </div>
 
     <footer v-if="policies.length > 0" class="policies caption">
       적용 정책
@@ -279,6 +299,30 @@ const summary = computed(() => {
 
 .source {
   color: var(--gray);
+}
+
+.sent {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.sent-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+}
+
+.sent-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .hint {

@@ -82,6 +82,8 @@ watch(
     if (!demo || replaying.value) return
     replaying.value = true
     entries.value = []
+    // 내 대화가 화면에서 내려갔으니 "이번 세션"도 비운다. 화면에 없는 것을 가리키면
+    // 사이드바가 거짓말을 한다.
     thread.startSession()
     banner.value = ''
     try {
@@ -153,7 +155,9 @@ async function send() {
 
     // 보냈으니 더 이상 작성 중이 아니다.
     thread.setWriting(null)
-    thread.addTurn(text, verdict.decision)
+    // "이번 세션"은 **직접 입력해 답변을 받은 것**만 센다. 데모 대화를 열어보는 것은
+    // 지난 대화를 훑는 행동이지 내가 이번에 한 일이 아니다.
+    if (!replaying.value) thread.addTurn(text, verdict.decision)
 
     if (verdict.decision === 'PENDING') startPolling(entry)
   } catch (err) {
@@ -257,15 +261,17 @@ function isHumanDecided(entry) {
 
       <article v-for="entry in entries" :id="`turn-${entry.key}`" :key="entry.key" class="turn">
         <!--
-          차단은 submittedText가 null이므로 작성자 본인의 입력값을 그린다 (D15).
-          나머지 상태는 서버가 돌려준 마스킹 적용본을 그린다.
-        -->
-        <MessageBubble
-          :text="entry.verdict.submittedText ?? entry.inputText"
-          :blocked="entry.verdict.decision === 'BLOCK'"
-        />
+          버블은 **작성자가 친 원문 그대로**다. 마스킹본을 여기 그리면 무엇을 물어봤는지
+          알아볼 수 없다 — 라벨로 바뀐 자리가 문장의 핵심일 때가 많다.
+          전송된 본문은 판정 카드가 따로 보여준다.
 
-        <VerdictCard :verdict="entry.verdict" />
+          이 값은 API가 아니라 FE 로컬 상태에서 온다. 원문 미표시 원칙(5.4)의 대상은
+          감사 콘솔에서 보는 타인의 원문이며, 작성자에게 자기 입력을 돌려주는 것은
+          유출이 아니다 (D15).
+        -->
+        <MessageBubble :text="entry.inputText" :blocked="entry.verdict.decision === 'BLOCK'" />
+
+        <VerdictCard :verdict="entry.verdict" :original-text="entry.inputText" />
 
         <!-- S5 검토 대기 -->
         <template v-if="entry.verdict.decision === 'PENDING'">
