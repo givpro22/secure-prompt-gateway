@@ -92,7 +92,7 @@ const ruleCount = computed(() =>
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 12px;
   font-size: 14.5px;
 }
 .status-line {
