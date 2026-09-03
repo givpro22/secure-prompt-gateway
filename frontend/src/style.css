@@ -13,6 +13,17 @@
   --card: #f4f6f9;
 
   /* 위 8종에서 파생된 값. 새 색을 만들지 않는다 */
+  /*
+   * 사이드바 표면색. 기획서 5.2의 판정색 8종과 역할이 다르다 — 저것은 판정을 구분하는
+   * 의미색이고 이것은 화면 구조를 나누는 표면색이다. 판정색으로 쓰지 않는다.
+   */
+  --nav-bg: #202b3c;
+  --nav-bg-soft: #2a3749;
+  --nav-bg-active: #33435a;
+  --nav-fg: #eef3fa;
+  --nav-muted: #a9b8cd;
+  --nav-line: #3a4a61;
+
   --page-bg: #ffffff;
   --border: #dfe4ec;
   --border-strong: #c6cddb;

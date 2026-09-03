@@ -1,12 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import AiCandidateList from '../components/AiCandidateList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
 import MessageInput from '../components/MessageInput.vue'
 import PendingIndicator from '../components/PendingIndicator.vue'
 import ModelChip from '../components/ModelChip.vue'
 import PolicyCaption from '../components/PolicyCaption.vue'
-import PolicyRail from '../components/PolicyRail.vue'
+import NoticeRail from '../components/NoticeRail.vue'
 import ScenarioCards from '../components/ScenarioCards.vue'
 import SessionTally from '../components/SessionTally.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -16,6 +16,7 @@ import { submitMessage } from '../api/messages'
 import { POLL_MAX_ATTEMPTS, usePolling } from '../composables/usePolling'
 import { errorText, expectField } from '../lib/contract'
 import { DECIDED_BY_TERMS, term } from '../lib/terms'
+import { useThreadStore } from '../stores/thread'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -27,7 +28,26 @@ import { DECIDED_BY_TERMS, term } from '../lib/terms'
  *  S5 검토   202 PENDING      스피너 → COMPLETED 후 AI 후보(읽기 전용)
  */
 
+const thread = useThreadStore()
 const draft = ref('')
+
+// 사이드바의 "새 대화" — 대화를 비운다. 영속화가 없으므로 화면 상태만 지우면 된다.
+watch(
+  () => thread.clearedAt,
+  () => {
+    entries.value = []
+    draft.value = ''
+    banner.value = ''
+  },
+)
+
+// 사이드바의 (demo) 이력을 누르면 그 문장이 입력창으로 온다.
+watch(
+  () => thread.pendingDraft,
+  (picked) => {
+    if (picked) draft.value = picked.text
+  },
+)
 const sending = ref(false)
 const banner = ref('')
 const entries = ref([])
@@ -82,6 +102,12 @@ async function send() {
      */
     draft.value = verdict.decision === 'BLOCK' ? text : ''
 
+    thread.push({
+      key: entry.key,
+      text: text.length > 26 ? `${text.slice(0, 26)}…` : text,
+      decision: verdict.decision,
+    })
+
     if (verdict.decision === 'PENDING') startPolling(entry)
   } catch (err) {
     banner.value = errorText(err, '전송에 실패했습니다.')
@@ -130,6 +156,8 @@ function startPolling(entry) {
 }
 
 function applyInspection(entry, inspection) {
+  // 사이드바 점 색도 최종 판정을 따라간다.
+  if (inspection?.status) thread.updateDecision(entry.key, inspection.status)
   entry.inspection = inspection
   entry.aiStatus = inspection.aiStatus
 }
@@ -175,7 +203,7 @@ function isHumanDecided(entry) {
         <ScenarioCards @pick="draft = $event" />
       </div>
 
-      <article v-for="entry in entries" :key="entry.key" class="turn">
+      <article v-for="entry in entries" :id="`turn-${entry.key}`" :key="entry.key" class="turn">
         <!--
           차단은 submittedText가 null이므로 작성자 본인의 입력값을 그린다 (D15).
           나머지 상태는 서버가 돌려준 마스킹 적용본을 그린다.
@@ -257,7 +285,7 @@ function isHumanDecided(entry) {
       </div>
     </footer>
   </div>
-  <PolicyRail />
+  <NoticeRail />
   </div>
 </template>
 

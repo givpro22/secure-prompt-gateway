@@ -151,10 +151,10 @@ const RULES = [
 ]
 
 const POLICIES = [
-  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 5, scope: 'GLOBAL', ownerDept: '정보보안팀' },
-  { policyId: 2, code: 'P-SEC', name: '자격증명·인프라 정보 보호', category: 'SECRET', version: 7, scope: 'GLOBAL', ownerDept: '정보보안팀' },
-  { policyId: 3, code: 'P-CONF', name: '고객사 프로젝트 정보 통제', category: 'CONFIDENTIAL', version: 2, scope: 'DEPT', ownerDept: '정보보안팀' },
-  { policyId: 4, code: 'P-EMBARGO', name: '보도자료 엠바고', category: 'EMBARGO', version: 1, scope: 'DEPT', ownerDept: '홍보팀' },
+  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 5, scope: 'GLOBAL', ownerDept: '정보보안팀', registeredAt: '2026-09-02' },
+  { policyId: 2, code: 'P-SEC', name: '자격증명·인프라 정보 보호', category: 'SECRET', version: 7, scope: 'GLOBAL', ownerDept: '정보보안팀', registeredAt: '2026-09-02' },
+  { policyId: 3, code: 'P-CONF', name: '고객사 프로젝트 정보 통제', category: 'CONFIDENTIAL', version: 2, scope: 'DEPT', ownerDept: '정보보안팀', registeredAt: '2026-09-02' },
+  { policyId: 4, code: 'P-EMBARGO', name: '보도자료 엠바고', category: 'EMBARGO', version: 1, scope: 'DEPT', ownerDept: '홍보팀', registeredAt: '2026-09-03' },
 ]
 
 /**
@@ -197,6 +197,8 @@ function policiesForDept(deptId) {
   return POLICIES.filter((p) => codes.includes(p.code)).map((policy) => ({
     ...policy,
     appliedVia: policy.scope === 'GLOBAL' ? 'GLOBAL' : 'DEPT',
+    // 백엔드는 policy.created_at의 날짜 부분을 싣는다. 픽스처는 고정값으로 흉내 낸다.
+    registeredAt: policy.registeredAt ?? '2026-09-03',
     rules: RULES.filter((r) => r.policyCode === policy.code).map((rule) => ({
       ruleId: rule.ruleId,
       code: rule.code,
