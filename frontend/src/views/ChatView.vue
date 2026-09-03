@@ -1,10 +1,13 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AiCandidateList from '../components/AiCandidateList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
 import MessageInput from '../components/MessageInput.vue'
 import PendingIndicator from '../components/PendingIndicator.vue'
+import ModelChip from '../components/ModelChip.vue'
 import PolicyCaption from '../components/PolicyCaption.vue'
+import NoticeRail from '../components/NoticeRail.vue'
+import SessionTally from '../components/SessionTally.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import VerdictCard from '../components/VerdictCard.vue'
 import { fetchInspection } from '../api/inspections'
@@ -12,6 +15,8 @@ import { submitMessage } from '../api/messages'
 import { POLL_MAX_ATTEMPTS, usePolling } from '../composables/usePolling'
 import { errorText, expectField } from '../lib/contract'
 import { DECIDED_BY_TERMS, term } from '../lib/terms'
+import { useSessionStore } from '../stores/session'
+import { useThreadStore } from '../stores/thread'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -23,7 +28,77 @@ import { DECIDED_BY_TERMS, term } from '../lib/terms'
  *  S5 검토   202 PENDING      스피너 → COMPLETED 후 AI 후보(읽기 전용)
  */
 
+const thread = useThreadStore()
+const session = useSessionStore()
 const draft = ref('')
+
+/*
+ * 빈 화면에서는 입력창이 가운데, 대화가 시작되면 아래로 내려간다.
+ * justify-content는 애니메이션이 안 되므로 입력창 아래 여백의 flex-grow를 1에서 0으로
+ * 줄인다 — 그건 보간되므로 입력창이 실제로 미끄러져 내려간다.
+ */
+const started = computed(() => entries.value.length > 0)
+
+/*
+ * 전송하지 않은 입력은 사이드바 "작성 중"으로 넘어간다. 타이핑마다 스토어를 때리지
+ * 않도록 잠깐 멈췄을 때만 반영한다.
+ */
+let writingTimer = null
+watch(draft, (text) => {
+  clearTimeout(writingTimer)
+  writingTimer = setTimeout(() => thread.setWriting(text), 500)
+})
+
+// 사이드바의 "새 대화" — 대화를 비운다. 영속화가 없으므로 화면 상태만 지우면 된다.
+watch(
+  () => thread.clearedAt,
+  () => {
+    entries.value = []
+    draft.value = ''
+    banner.value = ''
+  },
+)
+
+// 작성 중 항목 — 입력창만 복원한다.
+watch(
+  () => thread.pendingDraft,
+  (picked) => {
+    if (picked) draft.value = picked.text
+  },
+)
+
+/*
+ * 데모 대화 열기. **지금 대화를 갈아끼운다** — 이어붙이면 서로 다른 세션의 판정이
+ * 한 흐름처럼 보이고 누를수록 쌓이기만 한다.
+ *
+ * 판정 객체를 심지 않고 문장을 차례로 태운다. 앞 턴이 끝나야 다음 턴을 보내므로
+ * 순서가 화면에 그대로 남는다 — 차단당하고 고쳐서 다시 보내는 흐름이 그 순서다.
+ */
+const replaying = ref(false)
+
+watch(
+  () => thread.pendingDemo,
+  async (demo) => {
+    if (!demo || replaying.value) return
+    replaying.value = true
+    entries.value = []
+    // 내 대화가 화면에서 내려갔으니 "이번 세션"도 비운다. 화면에 없는 것을 가리키면
+    // 사이드바가 거짓말을 한다.
+    thread.startSession()
+    banner.value = ''
+    try {
+      for (const prompt of demo.prompts) {
+        draft.value = prompt
+        await nextTick()
+        await send()
+      }
+    } finally {
+      draft.value = ''
+      thread.setWriting(null)
+      replaying.value = false
+    }
+  },
+)
 const sending = ref(false)
 const banner = ref('')
 const entries = ref([])
@@ -78,6 +153,12 @@ async function send() {
      */
     draft.value = verdict.decision === 'BLOCK' ? text : ''
 
+    // 보냈으니 더 이상 작성 중이 아니다.
+    thread.setWriting(null)
+    // "이번 세션"은 **직접 입력해 답변을 받은 것**만 센다. 데모 대화를 열어보는 것은
+    // 지난 대화를 훑는 행동이지 내가 이번에 한 일이 아니다.
+    if (!replaying.value) thread.addTurn(text, verdict.decision)
+
     if (verdict.decision === 'PENDING') startPolling(entry)
   } catch (err) {
     banner.value = errorText(err, '전송에 실패했습니다.')
@@ -126,6 +207,8 @@ function startPolling(entry) {
 }
 
 function applyInspection(entry, inspection) {
+  // 담당자가 확정하면 대화 전체의 대표 판정도 따라 올라간다.
+  if (inspection?.status) thread.raiseDecision(inspection.status)
   entry.inspection = inspection
   entry.aiStatus = inspection.aiStatus
 }
@@ -158,26 +241,37 @@ function isHumanDecided(entry) {
 </script>
 
 <template>
-  <div class="chat">
+  <div class="layout">
+  <div class="chat" :class="{ started }">
     <p v-if="banner" class="banner">{{ banner }}</p>
 
+    <SessionTally :entries="entries" />
+
     <section class="thread">
-      <!-- S1 초기 -->
-      <p v-if="entries.length === 0" class="empty caption">
-        프롬프트를 입력해 전송하면 사내 정책에 따라 검사한 결과를 보여 줍니다.
-      </p>
+      <!-- S1 초기 — 인사말만. 입력창이 가운데 있다가 대화가 시작되면 내려간다 -->
+      <Transition name="greet">
+        <div v-if="!started" class="empty">
+          <h2 class="hello">안녕하세요, {{ session.currentUser?.name ?? '' }} 님</h2>
+          <p class="lead">
+            무엇이든 물어보세요. 보내기 전에 {{ session.currentDeptName }} 정책으로 검사하고,
+            판정과 근거를 기록으로 남깁니다.
+          </p>
+        </div>
+      </Transition>
 
-      <article v-for="entry in entries" :key="entry.key" class="turn">
+      <article v-for="entry in entries" :id="`turn-${entry.key}`" :key="entry.key" class="turn">
         <!--
-          차단은 submittedText가 null이므로 작성자 본인의 입력값을 그린다 (D15).
-          나머지 상태는 서버가 돌려준 마스킹 적용본을 그린다.
-        -->
-        <MessageBubble
-          :text="entry.verdict.submittedText ?? entry.inputText"
-          :blocked="entry.verdict.decision === 'BLOCK'"
-        />
+          버블은 **작성자가 친 원문 그대로**다. 마스킹본을 여기 그리면 무엇을 물어봤는지
+          알아볼 수 없다 — 라벨로 바뀐 자리가 문장의 핵심일 때가 많다.
+          전송된 본문은 판정 카드가 따로 보여준다.
 
-        <VerdictCard :verdict="entry.verdict" />
+          이 값은 API가 아니라 FE 로컬 상태에서 온다. 원문 미표시 원칙(5.4)의 대상은
+          감사 콘솔에서 보는 타인의 원문이며, 작성자에게 자기 입력을 돌려주는 것은
+          유출이 아니다 (D15).
+        -->
+        <MessageBubble :text="entry.inputText" :blocked="entry.verdict.decision === 'BLOCK'" />
+
+        <VerdictCard :verdict="entry.verdict" :original-text="entry.inputText" />
 
         <!-- S5 검토 대기 -->
         <template v-if="entry.verdict.decision === 'PENDING'">
@@ -243,20 +337,132 @@ function isHumanDecided(entry) {
 
     <footer class="composer">
       <MessageInput v-model="draft" :disabled="sending" @submit="send" />
-      <PolicyCaption />
+      <div class="composer-meta">
+        <ModelChip />
+        <PolicyCaption />
+      </div>
     </footer>
+
+    <!-- 입력창을 가운데로 밀어 올리는 여백. 대화가 시작되면 0으로 줄며 내려간다 -->
+    <div class="tail" aria-hidden="true" />
+  </div>
+  <NoticeRail />
   </div>
 </template>
 
 <style scoped>
+.layout {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
 .chat {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
   max-width: 880px;
   margin: 0 auto;
-  padding: 20px 16px 24px;
-  min-height: calc(100vh - var(--header-h));
+  padding: 20px 16px 20px;
+  height: 100%;
+  min-height: 0;
+}
+
+.thread {
+  flex: none;
+  /* 인사말이 빠질 때 absolute로 떠서 자리를 즉시 비우지 않게 한다 */
+  position: relative;
+}
+
+/* 대화가 쌓이면 스레드만 스크롤한다. 입력창과 캡션은 항상 보인다 */
+.chat.started .thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.composer {
+  flex: none;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.hello {
+  margin: 0;
+  font-size: 29px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
+.empty .lead {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--gray);
+}
+
+/* 입력창을 가운데로 밀어 올리는 여백. flex-grow는 보간되므로 실제로 미끄러진다 */
+.tail {
+  flex-grow: 1;
+  transition: flex-grow 460ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.chat.started .tail {
+  flex-grow: 0;
+}
+
+.greet-enter-active,
+.greet-leave-active {
+  transition: opacity 260ms ease, transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.greet-enter-from,
+.greet-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.greet-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tail,
+  .greet-enter-active,
+  .greet-leave-active {
+    transition: none;
+  }
+}
+
+.composer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+@media (max-width: 1180px) {
+  .layout > :last-child {
+    display: none;
+  }
 }
 
 .banner {

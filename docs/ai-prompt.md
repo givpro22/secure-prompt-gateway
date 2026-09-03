@@ -120,7 +120,7 @@
 | `departmentCode` | 제출자 부서 코드 |
 | `categories` | **매칭된 REVIEW 규칙이 속한 정책**의 카테고리. 적용 정책 전체가 아니다 |
 | `hits` | **KEYWORD 규칙(action=REVIEW) 매칭에서만** 생성. REGEX 매칭은 넣지 않는다 — PII·SECRET은 AI의 영역이 아니다. **매칭된 키워드를 전부 담는다** |
-| `policyVersion` | `code:version` 쌍을 code 사전순으로 `;` 연결. 예: `P-CONF:2;P-PII:3;P-SEC:7` |
+| `policyVersion` | `code:version` 쌍을 code 사전순으로 `;` 연결. 예: `P-CONF:2;P-PII:4;P-SEC:7` |
 
 정렬을 고정하는 이유는 Mock의 결정론 때문이다. 같은 입력에 같은 문자열이 나와야 한다.
 

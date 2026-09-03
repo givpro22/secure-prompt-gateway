@@ -13,15 +13,52 @@ SYSTEM = "\n".join(l[12:] if l.startswith(" " * 12) else l.strip()
                    for l in _body.split("\n")).strip()
 
 # 사전 필터: 시드(V2)의 mask_label과 REGEX 패턴. KEYWORD는 넣지 않는다.
-LABELS = ["[주민번호]", "[카드번호]", "[전화번호]", "[이메일]", "[내부IP]"]
-SEED = [r'\d{6}-?[1-4]\d{6}', r'\b(\d{4}-?){3}\d{4}\b', r'01[016789]-?\d{3,4}-?\d{4}',
-        r'[\w.+-]+@[\w-]+\.[\w.]+', r'AKIA[0-9A-Z]{16}',
-        r'(postgres|mysql|jdbc)[\w+]*://[^\s]+',
-        r'\b(10\.\d{1,3}|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b']
+def _rule_coverage():
+    """규칙 엔진이 이미 보는 것을 DB에서 직접 읽는다.
+
+    운영의 PolicyRuleCoverageSource와 같은 값을 봐야 골든셋이 운영을 재는 게 된다.
+    마이그레이션 SQL을 파싱하면 V4처럼 UPDATE로 패턴을 조이는 변경을 놓친다.
+
+    gateway-pg 컨테이너가 떠 있어야 한다.
+    """
+    import subprocess
+    def q(sql):
+        r = subprocess.run(
+            ["docker", "exec", "gateway-pg", "psql", "-U", "gateway", "-d", "gateway", "-tA", "-c", sql],
+            capture_output=True, text=True)
+        if r.returncode != 0:
+            raise SystemExit("DB를 읽지 못했습니다. gateway-pg가 떠 있는지 확인하세요.\n" + r.stderr)
+        return [l for l in r.stdout.strip().split("\n") if l]
+    labels = q("select distinct mask_label from policy_rule "
+               "where is_active and mask_label is not null;")
+    pats = q("select pattern from policy_rule "
+             "where is_active and rule_type = 'REGEX' and pattern is not null;")
+    return labels, pats
+
+
+LABELS, SEED = _rule_coverage()
+
+
+def _compile(pats):
+    """Java Pattern은 되지만 Python re가 못 쓰는 것이 있다 — 가변 길이 lookbehind
+    (계좌번호 규칙의 문맥 조건)가 그렇다. 건너뛰되 조용히 넘기지 않는다."""
+    import re as _re
+    out = []
+    for p in pats:
+        try:
+            out.append(_re.compile(p))
+        except _re.error as e:
+            print(f"  [사전 필터] Python re가 못 쓰는 패턴을 건너뜁니다: {p[:44]}… ({e})")
+    return out
+
+
+_COMPILED = _compile(SEED)
+
+
 
 def covered(t):
     if any(l in t for l in LABELS): return "라벨"
-    return "정규식" if any(re.search(p, t) for p in SEED) else None
+    return "정규식" if any(p.search(t) for p in _COMPILED) else None
 
 FMT = {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object",
        "properties": {"index": {"type": "integer"},

@@ -63,6 +63,19 @@ public class RuleEngine {
         // 0. 엠바고 만료 (결정 4). 해제일이 지난 규칙은 매칭시키지 않는다.
         //    appliedRuleCodes에는 그대로 남긴다 — 로드된 규칙과 매칭된 규칙은 다르며(8.4),
         //    "적용은 됐는데 이미 풀린 규칙"이 감사 기록에 보이는 편이 사후 소명에 낫다.
+        // ROSTER 규칙은 PolicyService가 판정 직전에 정규식으로 펼쳐서 넘긴다 (0.5.1 D23).
+        // 여기까지 펼쳐지지 않은 채로 오면 아래 매칭 루프가 REGEX도 KEYWORD도 아니라 조용히
+        // 건너뛴다 — 적용돼야 할 규칙이 검사 없이 지나가고 결과는 ALLOWED로 기록된다.
+        // 감사 기록이 거짓이 되는 경로라 조용히 넘기지 않는다.
+        rules.stream()
+                .filter(rule -> rule.getRuleType() == RuleType.ROSTER)
+                .findFirst()
+                .ifPresent(rule -> {
+                    throw new IllegalStateException(
+                            "ROSTER 규칙 " + rule.getCode() + "이 펼쳐지지 않은 채 엔진에 들어왔습니다. "
+                                    + "PolicyService.loadForDecision을 거치거나 RosterExpander.expand를 먼저 부르십시오.");
+                });
+
         LocalDate today = LocalDate.now(clock);
         List<PolicyRule> effective = rules.stream().filter(rule -> !isReleased(rule, today)).toList();
 
@@ -150,19 +163,32 @@ public class RuleEngine {
     }
 
     /**
-     * {@code AiInspectionRequest.hits} (계약서 §4). <b>KEYWORD 규칙의 REVIEW 매칭에서만</b>
-     * 만든다 — PII·SECRET은 AI의 영역이 아니다 (9.2 금지 조항).
+     * {@code AiInspectionRequest.hits} (계약서 §4). <b>REVIEW 매칭에서만</b> 만든다 —
+     * PII·SECRET의 확정 판정은 AI의 영역이 아니다 (9.2 금지 조항).
      *
-     * <p>키워드당 1건이다 (0.5 D9). Case B는 finding 1건에 hits 2건({@code A사}, {@code 차세대})이다.
+     * <p>KEYWORD는 키워드당 1건이다 (0.5 D9). Case B는 finding 1건에 hits 2건
+     * ({@code A사}, {@code 차세대})이다.
+     *
+     * <p>REGEX REVIEW는 <b>매칭 문자열을 넣지 않고</b> 규칙당 1건만 만든다. 실명 의심처럼
+     * 매칭 자체가 개인정보인 규칙이 있어서, 그대로 넣으면 이름이 AI 요청과 로그에 남는다.
+     * {@code hits}가 비면 {@code AiInspector}가 무결성 위반으로 예외를 던지므로
+     * 자리는 채우되 내용은 넘기지 않는다.
      */
+    private static final String REDACTED_HIT = "(형식 일치)";
+
     private static List<KeywordHit> keywordHits(List<RuleHit> findings) {
         List<KeywordHit> hits = new ArrayList<>();
+        Set<String> regexReviewSeen = new LinkedHashSet<>();
         for (RuleHit finding : findings) {
-            if (finding.ruleType() != RuleType.KEYWORD || finding.action() != RuleAction.REVIEW) {
+            if (finding.action() != RuleAction.REVIEW) {
                 continue;
             }
-            for (String keyword : finding.matchedKeywords()) {
-                hits.add(new KeywordHit(keyword, finding.code(), finding.rule().getSource()));
+            if (finding.ruleType() == RuleType.KEYWORD) {
+                for (String keyword : finding.matchedKeywords()) {
+                    hits.add(new KeywordHit(keyword, finding.code(), finding.rule().getSource()));
+                }
+            } else if (regexReviewSeen.add(finding.code())) {
+                hits.add(new KeywordHit(REDACTED_HIT, finding.code(), finding.rule().getSource()));
             }
         }
         return List.copyOf(hits);
