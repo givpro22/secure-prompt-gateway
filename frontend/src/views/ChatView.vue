@@ -401,7 +401,7 @@ function isHumanDecided(entry) {
 
 .hello {
   margin: 0;
-  font-size: 25px;
+  font-size: 29px;
   font-weight: 700;
   color: var(--navy);
   letter-spacing: -0.02em;
@@ -410,7 +410,7 @@ function isHumanDecided(entry) {
 .empty .lead {
   margin: 0;
   max-width: 44ch;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--gray);
 }

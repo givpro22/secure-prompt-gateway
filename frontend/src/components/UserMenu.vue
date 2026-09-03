@@ -8,6 +8,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import RuleBook from './RuleBook.vue'
 import { useSessionStore } from '../stores/session'
 
 const session = useSessionStore()
@@ -16,13 +17,15 @@ const router = useRouter()
 const open = ref(false)
 const panel = ref(null)
 const root = ref(null)
+/* 계정 변경은 별도 창을 띄우지 않고 메뉴 옆으로 펼친다. 한 번 더 누르는 단계를 없앤다 */
+const accountOpen = ref(false)
 
 const MENU = [
   { id: 'settings', label: '설정', icon: 'gear' },
   { id: 'security', label: '보안담당자 요청', icon: 'shield' },
   { id: 'rules', label: '사규 열람', icon: 'book' },
   { id: 'help', label: '도움말', icon: 'help' },
-  { id: 'account', label: '계정 변경', icon: 'switch' },
+  { id: 'account', label: '계정 변경', icon: 'switch', submenu: true },
 ]
 
 const ICONS = {
@@ -35,20 +38,6 @@ const ICONS = {
 
 const admin = computed(() => session.users.find((u) => u.role === 'SECURITY_ADMIN') ?? null)
 
-/** 적용 규칙의 출처를 중복 없이 모은다. 이것이 곧 이 부서에 걸리는 사규 목록이다 */
-const sources = computed(() => {
-  const map = new Map()
-  for (const policy of session.policies) {
-    for (const rule of policy.rules ?? []) {
-      if (!rule.source) continue
-      const hit = map.get(rule.source) ?? { source: rule.source, codes: [], obligation: rule.obligation }
-      hit.codes.push(rule.code)
-      map.set(rule.source, hit)
-    }
-  }
-  return [...map.values()]
-})
-
 const ruleCount = computed(() =>
   session.policies.reduce((n, p) => n + (p.rules?.length ?? 0), 0),
 )
@@ -58,9 +47,20 @@ const baseDate = computed(() => {
   return dates.length === 0 ? '—' : dates.slice().sort().at(-1)
 })
 
-function pick(id) {
+function pick(item) {
+  if (item.submenu) {
+    accountOpen.value = !accountOpen.value
+    return
+  }
   open.value = false
-  panel.value = id
+  accountOpen.value = false
+  panel.value = item.id
+}
+
+function switchTo(userId) {
+  session.setCurrentUser(userId)
+  accountOpen.value = false
+  open.value = false
 }
 
 function goAudit() {
@@ -68,16 +68,16 @@ function goAudit() {
   router.push('/admin/audit')
 }
 
-function onAccount(event) {
-  session.setCurrentUser(Number(event.target.value))
-}
-
 function onOutside(event) {
-  if (root.value && !root.value.contains(event.target)) open.value = false
+  if (root.value && !root.value.contains(event.target)) {
+    open.value = false
+    accountOpen.value = false
+  }
 }
 function onKey(event) {
   if (event.key !== 'Escape') return
   if (panel.value) panel.value = null
+  else if (accountOpen.value) accountOpen.value = false
   else open.value = false
 }
 onMounted(() => {
@@ -94,7 +94,6 @@ const PANEL_TITLE = {
   security: '보안담당자 요청',
   rules: '사규 열람',
   help: '도움말',
-  account: '계정 변경',
 }
 </script>
 
@@ -110,13 +109,36 @@ const PANEL_TITLE = {
     </button>
 
     <ul v-if="open" class="menu" role="menu">
-      <li v-for="m in MENU" :key="m.id">
-        <button type="button" class="menu-item" role="menuitem" @click="pick(m.id)">
+      <li v-for="m in MENU" :key="m.id" class="menu-row">
+        <button
+          type="button"
+          class="menu-item"
+          role="menuitem"
+          :aria-expanded="m.submenu ? accountOpen : undefined"
+          @click="pick(m)"
+        >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <path :d="ICONS[m.icon]" fill="currentColor" />
           </svg>
-          {{ m.label }}
+          <span class="mi-label">{{ m.label }}</span>
+          <span v-if="m.submenu" class="arrow" :class="{ open: accountOpen }" aria-hidden="true">›</span>
         </button>
+
+        <!-- 계정 목록. 옆으로 펼쳐 바로 고른다 -->
+        <ul v-if="m.submenu && accountOpen" class="submenu" role="menu">
+          <li v-for="u in session.users" :key="u.userId">
+            <button
+              type="button"
+              class="menu-item sub"
+              role="menuitemradio"
+              :aria-checked="u.userId === session.currentUserId"
+              @click="switchTo(u.userId)"
+            >
+              <span class="tick" aria-hidden="true">{{ u.userId === session.currentUserId ? '✓' : '' }}</span>
+              <span class="mi-label">{{ u.name }} · {{ u.department.name }}</span>
+            </button>
+          </li>
+        </ul>
       </li>
     </ul>
   </div>
@@ -155,16 +177,8 @@ const PANEL_TITLE = {
           <button type="button" class="go" @click="goAudit">감사 콘솔 열기</button>
         </div>
 
-        <!-- 사규 열람 — 적용 규칙의 source를 모은 것이 곧 근거 목록이다 -->
-        <div v-else-if="panel === 'rules'" class="body">
-          <p class="note">{{ session.currentDeptName }}에 적용되는 규칙의 근거입니다.</p>
-          <ul class="sources">
-            <li v-for="s in sources" :key="s.source">
-              <span class="src-name">{{ s.source }}</span>
-              <span class="src-codes">{{ s.codes.join(', ') }}</span>
-            </li>
-          </ul>
-        </div>
+        <!-- 사규 열람 — 조문은 규칙에서 생성한다. RuleBook 주석 참고 -->
+        <RuleBook v-else-if="panel === 'rules'" />
 
         <!-- 도움말 -->
         <div v-else-if="panel === 'help'" class="body">
@@ -179,18 +193,7 @@ const PANEL_TITLE = {
           </p>
         </div>
 
-        <!-- 계정 변경 -->
-        <div v-else class="body">
-          <p class="note">로그인이 없어 계정 전환으로 부서를 바꿉니다. 부서에 따라 판정이 갈립니다.</p>
-          <label class="field">
-            <span>계정</span>
-            <select :value="session.currentUserId" @change="onAccount">
-              <option v-for="u in session.users" :key="u.userId" :value="u.userId">
-                {{ u.name }} · {{ u.department.name }}
-              </option>
-            </select>
-          </label>
-        </div>
+
       </section>
     </div>
   </Teleport>
@@ -227,7 +230,7 @@ const PANEL_TITLE = {
   flex: none;
   border-radius: 50%;
   background: var(--nav-bg-active);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -240,18 +243,18 @@ const PANEL_TITLE = {
 }
 
 .who strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .who em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--nav-muted);
 }
 
 .caret {
   color: var(--nav-muted);
-  font-size: 9px;
+  font-size: 10px;
   transition: transform 140ms ease;
 }
 .caret.up {
@@ -284,12 +287,57 @@ const PANEL_TITLE = {
   background: transparent;
   color: var(--nav-fg);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13.5px;
   text-align: left;
 }
 
 .menu-item:hover {
   background: var(--nav-bg-active);
+}
+
+.menu-row {
+  position: relative;
+}
+
+.mi-label {
+  flex: 1;
+}
+
+.arrow {
+  color: var(--nav-muted);
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.arrow.open {
+  transform: rotate(90deg);
+}
+
+.submenu {
+  position: absolute;
+  left: calc(100% + 6px);
+  bottom: -5px;
+  z-index: 25;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  min-width: 176px;
+  border: 1px solid var(--nav-line);
+  border-radius: 10px;
+  background: var(--nav-bg-soft);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 32%);
+}
+
+.menu-item.sub {
+  font-size: 13px;
+}
+
+.tick {
+  width: 12px;
+  flex: none;
+  color: var(--nav-fg);
+  font-size: 12px;
 }
 
 .overlay {
@@ -303,7 +351,7 @@ const PANEL_TITLE = {
 }
 
 .dialog {
-  width: min(480px, 100%);
+  width: min(560px, 100%);
   max-height: 80vh;
   overflow-y: auto;
   overflow-x: hidden;
@@ -322,14 +370,14 @@ const PANEL_TITLE = {
 
 .dialog-head h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16.5px;
   color: var(--navy);
 }
 
 .close {
   border: 0;
   background: transparent;
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
   color: var(--gray);
 }
@@ -345,7 +393,7 @@ const PANEL_TITLE = {
   display: grid;
   grid-template-columns: 92px 1fr;
   gap: 10px;
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 dt {
@@ -376,7 +424,7 @@ dd {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--navy);
   line-height: 1.65;
 }
@@ -389,40 +437,6 @@ dd {
   color: var(--gray);
 }
 
-.sources {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.sources li {
-  /* 규칙 코드가 길어지면 가로 배치에서 사규 이름이 0폭으로 눌려 세로로 깨진다.
-     이름을 위에 두고 코드는 아래에서 줄바꿈시킨다. */
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--card);
-}
-
-.src-name {
-  color: var(--navy);
-  font-weight: 600;
-}
-
-.src-codes {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--blue);
-  overflow-wrap: anywhere;
-}
-
 .go {
   align-self: flex-start;
   padding: 7px 14px;
@@ -431,21 +445,8 @@ dd {
   background: var(--navy);
   color: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.field select {
-  padding: 7px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  font: inherit;
-  font-size: 13px;
-}
 </style>

@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--navy);
 }
 
@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
 
 .caret {
   color: var(--gray);
-  font-size: 9px;
+  font-size: 10px;
   transition: transform 140ms ease;
 }
 

@@ -194,7 +194,9 @@ function token(decision) {
   width: 236px;
   flex: none;
   height: 100%;
-  overflow: hidden;
+  /* 계정 서브메뉴가 사이드바 밖으로 펼쳐진다. 스크롤은 안쪽 .scroll이 맡으므로
+     여기서 overflow를 막으면 서브메뉴만 잘린다. */
+  overflow: visible;
   padding: 16px 14px;
   background: var(--nav-bg);
   color: var(--nav-fg);
@@ -215,7 +217,7 @@ function token(decision) {
   border-radius: 9px;
   background: var(--nav-bg-active);
   color: var(--nav-fg);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -226,12 +228,12 @@ function token(decision) {
 }
 
 .name strong {
-  font-size: 14.5px;
+  font-size: 15.5px;
 }
 
 .name em {
   font-style: normal;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--nav-muted);
 }
 
@@ -243,7 +245,7 @@ function token(decision) {
   background: var(--nav-bg-soft);
   color: var(--nav-fg);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -262,7 +264,7 @@ function token(decision) {
   border-radius: 8px;
   color: var(--nav-muted);
   text-decoration: none;
-  font-size: 13.5px;
+  font-size: 14.5px;
 }
 
 .nav-item:hover {
@@ -278,7 +280,7 @@ function token(decision) {
 
 .history h2 {
   margin: 6px 0 6px 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--nav-muted);
@@ -313,7 +315,7 @@ function token(decision) {
   background: transparent;
   color: var(--nav-muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13.5px;
   text-align: left;
 }
 
@@ -357,13 +359,13 @@ function token(decision) {
 
 .turns {
   flex: none;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--nav-muted);
 }
 
 .demo {
   flex: none;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--nav-line);
 }
 

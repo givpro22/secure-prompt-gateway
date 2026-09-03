@@ -34,7 +34,7 @@ const single = MODELS.length === 1 ? MODELS[0] : null
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: #fff;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .dot {
@@ -58,6 +58,6 @@ const single = MODELS.length === 1 ? MODELS[0] : null
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 </style>

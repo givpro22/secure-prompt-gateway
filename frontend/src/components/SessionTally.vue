@@ -40,7 +40,7 @@ const counts = computed(() =>
   flex-wrap: wrap;
   gap: 6px 14px;
   padding: 8px 0 14px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .title {

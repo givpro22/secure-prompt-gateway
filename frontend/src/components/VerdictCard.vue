@@ -313,7 +313,7 @@ const summary = computed(() => {
 .sent-label {
   display: block;
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--gray);
@@ -321,7 +321,7 @@ const summary = computed(() => {
 
 .sent-body {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.65;
 }
 
@@ -361,7 +361,7 @@ const summary = computed(() => {
   background: var(--navy);
   color: #fff;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 

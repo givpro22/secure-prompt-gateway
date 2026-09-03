@@ -28,8 +28,9 @@
   --border: #dfe4ec;
   --border-strong: #c6cddb;
 
-  --font-body: 14px;
-  --font-caption: 12px;
+  /* 시연 가독성 — 프로젝터에서 읽히도록 한 단계 키웠다 */
+  --font-body: 15px;
+  --font-caption: 13px;
   --header-h: 56px;
 
   color-scheme: light;

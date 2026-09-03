@@ -9,8 +9,14 @@
  * 하단 "정책 기준"은 적용 정책 중 가장 최근 등록일이다. 버전 정수(v5)는 판정
  * 스냅샷 대조용이지 사람이 읽는 값이 아니라 날짜로 보여준다.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useSessionStore } from '../stores/session'
+
+/*
+ * 접힘 상태를 모듈 스코프에 둔다. 챗 ↔ 감사 콘솔을 오갈 때 컴포넌트가 다시 마운트되는데,
+ * 그때마다 레일이 다시 펼쳐지면 접어 둔 의미가 없다. 새로고침하면 초기화된다.
+ */
+const collapsed = ref(false)
 
 const session = useSessionStore()
 
@@ -61,8 +67,22 @@ const baseDate = computed(() => {
 </script>
 
 <template>
-  <aside class="rail">
-    <h2>알아둘 소식</h2>
+  <!-- 접었을 때는 다시 펼 수 있는 얇은 띠만 남긴다 -->
+  <aside v-if="collapsed" class="rail collapsed">
+    <button type="button" class="toggle" aria-label="알아둘 소식 펼치기" @click="collapsed = false">
+      ‹
+    </button>
+    <span class="spine" aria-hidden="true">알아둘 소식</span>
+    <span v-if="notices.length > 0" class="count" aria-hidden="true">{{ notices.length }}</span>
+  </aside>
+
+  <aside v-else class="rail">
+    <div class="rail-head">
+      <h2>알아둘 소식</h2>
+      <button type="button" class="toggle" aria-label="알아둘 소식 접기" @click="collapsed = true">
+        ›
+      </button>
+    </div>
     <p class="sub">{{ session.currentDeptName }}에 적용되는 정책에서 나온 것만 보여줍니다.</p>
 
     <p v-if="!session.policiesLoaded" class="loading caption">불러오는 중…</p>
@@ -93,6 +113,56 @@ const baseDate = computed(() => {
 </template>
 
 <style scoped>
+.rail.collapsed {
+  width: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 6px;
+}
+
+.spine {
+  writing-mode: vertical-rl;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+}
+
+.count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toggle {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--gray);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.toggle:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
 .rail {
   width: 296px;
   flex: none;
@@ -109,7 +179,8 @@ const baseDate = computed(() => {
 
 h2 {
   margin: 0;
-  font-size: 11px;
+  flex: 1;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--gray);
@@ -117,7 +188,7 @@ h2 {
 
 .sub {
   margin: 0 0 10px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.5;
   color: var(--gray);
 }
@@ -163,7 +234,7 @@ h2 {
 }
 
 .kind {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--gray);
@@ -177,26 +248,26 @@ h2 {
 }
 
 .date {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gray);
   font-variant-numeric: tabular-nums;
 }
 
 .title {
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.45;
   color: var(--navy);
 }
 
 .body {
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.55;
   color: var(--gray);
 }
 
 .source {
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--gray);
 }
 
@@ -208,7 +279,7 @@ h2 {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--border-strong);
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--gray);
   font-variant-numeric: tabular-nums;
 }
