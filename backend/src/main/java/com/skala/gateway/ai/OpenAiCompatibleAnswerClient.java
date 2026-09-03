@@ -72,8 +72,18 @@ public class OpenAiCompatibleAnswerClient implements AnswerClient {
         } catch (RestClientException e) {
             throw new AnswerCallException("호출 실패: " + e.getMessage(), e);
         }
+        // Gemini의 OpenAI 호환 엔드포인트는 오류를 [{"error": …}] 처럼 배열로 감싼다.
+        // 배열이면 첫 원소를 본다. 이유를 버리고 "choices 없음"이라고만 하면 디버깅이 안 된다.
+        if (json != null && json.isArray() && json.size() > 0) {
+            json = json.get(0);
+        }
+        if (json != null && json.has("error")) {
+            JsonNode err = json.path("error");
+            String why = err.isObject() ? err.path("message").asText(err.toString()) : err.asText();
+            throw new AnswerCallException("제공자 오류: " + why, null);
+        }
         if (json == null || json.path("choices").isEmpty()) {
-            throw new AnswerCallException("응답에 choices가 없습니다", null);
+            throw new AnswerCallException("응답에 choices가 없습니다: " + (json == null ? "null" : json.toString()), null);
         }
         JsonNode choice = json.path("choices").get(0);
         String finish = choice.path("finish_reason").asText("");
