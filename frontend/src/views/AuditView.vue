@@ -15,6 +15,7 @@ import {
   term,
 } from '../lib/terms'
 import { useSessionStore } from '../stores/session'
+import UnmaskQueue from '../components/UnmaskQueue.vue'
 
 /*
  * SCR-02 관리자 감사 콘솔 (기획서 5.4).
@@ -296,6 +297,12 @@ onMounted(async () => {
 
 <template>
   <div class="audit">
+    <!--
+      해제 요청 대기열 (D25). 보안 담당자에게만 뜬다 — 이 화면이 원문을 여는 유일한
+      곳이라, 볼 수 있는 사람과 확정할 수 있는 사람이 같아야 한다.
+    -->
+    <UnmaskQueue v-if="canReview" />
+
     <!-- 판정별 건수. 카드를 누르면 그 판정으로 목록이 좁혀진다 -->
     <section class="tally">
       <button

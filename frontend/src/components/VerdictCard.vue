@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { requestUnmask } from '../api/unmask'
 import LlmPicker from './LlmPicker.vue'
 import MaskedText from './MaskedText.vue'
 import StatusBadge from './StatusBadge.vue'
@@ -121,6 +122,55 @@ const isAllow = computed(() => props.verdict.decision === 'ALLOW')
 const isBlock = computed(() => props.verdict.decision === 'BLOCK')
 const isMask = computed(() => props.verdict.decision === 'MASK')
 
+/*
+ * 마스킹 해제 검토 요청 (D25).
+ *
+ * 규칙은 명단의 문자열만 본다. 고객과 이름이 같은 직원을 "서지윤 대리한테"라고 쓰면
+ * 그 이름도 [고객명]으로 가려지고, 문맥을 읽지 못하는 규칙으로는 둘을 가를 수 없다.
+ * 여기서 사람에게 넘긴다 — 사유를 적어 올리면 보안 담당자가 원문과 마스킹본을 나란히
+ * 놓고 정한다.
+ *
+ * 요청이 통과해도 이미 나간 본문은 되돌아오지 않는다. 회수할 수 없는 것을 회수한 척하는
+ * 화면이 더 위험하다. 얻는 것은 "이 건은 가릴 필요가 없었다"는 판단이고, 그것을 근거로
+ * 다시 보내는 것은 사람이 한다.
+ */
+const asking = ref(false)
+const reason = ref('')
+const submitting = ref(false)
+const requested = ref(null)
+const requestError = ref('')
+
+/** 명단 규칙에 걸린 건에만 권한다. 주민번호를 풀어 달라고 할 자리는 아니다 */
+const ROSTER_CODES = ['PII-CUST-07', 'PII-CUST-08']
+const hasRosterHit = computed(() => matches.value.some((m) => ROSTER_CODES.includes(m.code)))
+const canAskUnmask = computed(
+  () => isMask.value && props.verdict.messageId != null && requested.value === null,
+)
+
+function openAsk() {
+  asking.value = true
+  requestError.value = ''
+  if (reason.value.length === 0 && hasRosterHit.value) {
+    reason.value = '사내 직원 이름입니다. 고객 명단과 이름만 같습니다.'
+  }
+}
+
+async function submitAsk() {
+  const text = reason.value.trim()
+  if (text.length === 0 || submitting.value) return
+  submitting.value = true
+  requestError.value = ''
+  try {
+    requested.value = await requestUnmask(props.verdict.messageId, text)
+    asking.value = false
+  } catch (err) {
+    requestError.value =
+      err?.response?.data?.message ?? '검토 요청을 보내지 못했습니다. 잠시 후 다시 시도하세요.'
+  } finally {
+    submitting.value = false
+  }
+}
+
 const summary = computed(() => {
   switch (props.verdict.decision) {
     case 'ALLOW':
@@ -174,6 +224,43 @@ const summary = computed(() => {
     </p>
     <p v-if="isMask" class="hint">
       탐지된 개인정보를 라벨로 치환한 본문만 전송되었습니다.
+      <template v-if="hasRosterHit">
+        고객 명단과 이름만 같은 직원이라면 검토를 요청할 수 있습니다.
+      </template>
+    </p>
+
+    <!-- 마스킹 해제 검토 요청 (D25). 사람이 원문과 마스킹본을 비교해 정한다 -->
+    <div v-if="canAskUnmask" class="unmask">
+      <button v-if="!asking" type="button" class="unmask-open" @click="openAsk">
+        마스킹 검토 요청
+      </button>
+      <form v-else class="unmask-form" @submit.prevent="submitAsk">
+        <label class="unmask-label" for="unmask-reason">
+          왜 가리지 않아도 되는지 적어 주세요. 보안 담당자가 원문과 함께 봅니다.
+        </label>
+        <textarea
+          id="unmask-reason"
+          v-model="reason"
+          rows="2"
+          maxlength="500"
+          :disabled="submitting"
+          placeholder="예) 사내 직원 이름입니다. 고객 명단과 이름만 같습니다."
+        />
+        <div class="unmask-actions">
+          <button type="button" class="unmask-cancel" :disabled="submitting" @click="asking = false">
+            취소
+          </button>
+          <button type="submit" class="unmask-send" :disabled="submitting || reason.trim().length === 0">
+            {{ submitting ? '보내는 중…' : '요청 보내기' }}
+          </button>
+        </div>
+        <p v-if="requestError" class="unmask-error">{{ requestError }}</p>
+      </form>
+    </div>
+
+    <p v-else-if="requested" class="unmask-done">
+      검토 요청됨 — 보안 담당자가 원문과 마스킹본을 비교해 확정합니다.
+      이미 전송된 본문은 되돌아오지 않습니다.
     </p>
 
     <!-- 원문은 위 버블에 그대로 있고, 실제로 나간 본문은 여기에 있다 -->
@@ -350,6 +437,84 @@ const summary = computed(() => {
   margin: 10px 0 0;
   font-size: var(--font-caption);
   color: var(--navy);
+}
+
+/* 마스킹 해제 검토 요청 (D25) */
+.unmask {
+  margin-top: 12px;
+}
+.unmask-open {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 13px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 13px;
+  cursor: pointer;
+}
+.unmask-open:hover {
+  border-color: var(--navy);
+}
+.unmask-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.unmask-label {
+  color: var(--gray);
+  font-size: 13px;
+}
+.unmask-form textarea {
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--navy);
+}
+.unmask-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.unmask-cancel,
+.unmask-send {
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.unmask-cancel {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--gray);
+}
+.unmask-send {
+  border: 1px solid var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+.unmask-send:disabled,
+.unmask-cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.unmask-error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 13px;
+}
+.unmask-done {
+  margin: 12px 0 0;
+  color: var(--gray);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .egress {

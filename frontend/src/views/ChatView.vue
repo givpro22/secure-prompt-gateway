@@ -87,6 +87,7 @@ const replaying = ref(false)
  */
 const ownEntries = ref([])
 
+
 /*
  * 지금 화면이 내 대화인지. 스토어의 `viewing`을 보지 않는 이유가 있다 — 스토어는
  * 사이드바 강조를 위해 값을 먼저 바꿔 두므로, 그것으로 판단하면 되돌리는 쪽이
@@ -96,7 +97,7 @@ const showingOwn = ref(true)
 
 /** 치워 둔 내 대화를 되돌린다. 입력하거나 "이번 세션"을 누를 때 탄다 */
 function restoreOwn() {
-  thread.viewing = 'own'
+  thread.setViewing('own')
   if (showingOwn.value) return
   entries.value = ownEntries.value
   ownEntries.value = []
@@ -152,6 +153,40 @@ const {
   start: startPoll,
 } = usePolling()
 let nextKey = 1
+
+/*
+ * 계정별 대화. 로그인이 없어 계정을 갈아 끼우며 시연하는데(0.3), 한 벌만 두면
+ * 영업팀으로 바꾼 순간 개발팀이 하던 말이 화면에 그대로 남는다. 부서에 따라 판정이
+ * 갈리는 것을 보여주는 자리라 특히 섞이면 안 된다.
+ *
+ * 스토어가 아니라 여기 두는 이유는 entries가 판정 응답 덩어리이기 때문이다. 사이드바가
+ * 읽어야 하는 요약(제목·턴 수·작성 중)만 스토어에 있고, 본문은 화면이 들고 있는다.
+ */
+const convByUser = new Map()
+
+function snapshotConversation() {
+  return {
+    entries: entries.value,
+    ownEntries: ownEntries.value,
+    showingOwn: showingOwn.value,
+    draft: draft.value,
+  }
+}
+
+watch(
+  () => session.currentUserId,
+  (next, prev) => {
+    if (prev != null) convByUser.set(prev, snapshotConversation())
+    const saved = convByUser.get(next)
+    entries.value = saved?.entries ?? []
+    ownEntries.value = saved?.ownEntries ?? []
+    showingOwn.value = saved?.showingOwn ?? true
+    draft.value = saved?.draft ?? ''
+    banner.value = ''
+    thread.useAccount(next)
+  },
+  { immediate: true },
+)
 
 /** 상태 코드와 decision이 계약(§1-4)대로 대응하는지 확인한다. */
 function checkDecision(status, verdict) {

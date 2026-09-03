@@ -123,4 +123,41 @@ public class ApiException extends RuntimeException {
         return new ApiException(HttpStatus.CONFLICT, "RULE_FINDING_NOT_REVIEWABLE",
                 "finding " + findingId + "는 규칙 판정이라 사람이 확정하지 않습니다.");
     }
+
+    public static ApiException messageNotFound(Object messageId) {
+        return new ApiException(HttpStatus.NOT_FOUND, "MESSAGE_NOT_FOUND",
+                "message " + messageId + "를 찾을 수 없습니다.");
+    }
+
+    /**
+     * 해제 요청은 자기 프롬프트에만 건다 (D25).
+     *
+     * <p>남의 문장을 두고 원문을 열어 달라고 할 수는 없다. 이 요청이 원문 열람의 근거가
+     * 되므로, 근거를 만드는 사람과 문장을 쓴 사람이 같아야 한다.
+     */
+    public static ApiException notAuthor(Object messageId) {
+        return new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN_NOT_AUTHOR",
+                "해제 요청은 작성자만 할 수 있습니다. message " + messageId + "는 다른 사용자의 것입니다.");
+    }
+
+    /** 마스킹된 건에만 해제가 성립한다. 가린 것이 없으면 풀 것도 없다 */
+    public static ApiException notMasked(Object messageId) {
+        return new ApiException(HttpStatus.CONFLICT, "NOT_MASKED",
+                "message " + messageId + "는 마스킹된 건이 아니라 해제 요청 대상이 아닙니다.");
+    }
+
+    public static ApiException unmaskRequestExists(Object messageId) {
+        return new ApiException(HttpStatus.CONFLICT, "UNMASK_REQUEST_EXISTS",
+                "message " + messageId + "에는 이미 해제 요청이 있습니다.");
+    }
+
+    public static ApiException unmaskRequestNotFound(Object requestId) {
+        return new ApiException(HttpStatus.NOT_FOUND, "UNMASK_REQUEST_NOT_FOUND",
+                "해제 요청 " + requestId + "를 찾을 수 없습니다.");
+    }
+
+    public static ApiException unmaskAlreadyDecided(Object requestId, Object current) {
+        return new ApiException(HttpStatus.CONFLICT, "UNMASK_ALREADY_DECIDED",
+                "해제 요청 " + requestId + "는 이미 " + current + "로 확정되었습니다.");
+    }
 }

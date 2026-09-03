@@ -567,7 +567,58 @@ export function createFixtureState() {
     }
   }
 
-  return { inspections, createInspection, settleAi, recompute, toRow, toDetail }
+  /*
+   * 마스킹 해제 검토 (D25). 실서버와 같은 규칙으로 판정한다 —
+   * 자기 건만, 마스킹된 건만, 한 건에 하나, 확정은 보안 담당자만.
+   */
+  const unmaskRequests = new Map()
+  let nextRequestId = 1
+
+  /** 원문은 요청이 붙은 건에만 열린다. 담당자 목록에서만 실린다 */
+  function unmaskRow(request, forReviewer) {
+    const inspection = [...inspections.values()].find((i) => i.messageId === request.messageId)
+    return {
+      requestId: request.requestId,
+      messageId: request.messageId,
+      requester: { userId: request.requester.userId, name: request.requester.name },
+      reason: request.reason,
+      status: request.status,
+      originalText: forReviewer ? (inspection?._text ?? null) : null,
+      submittedText: forReviewer ? (inspection?.submittedText ?? null) : null,
+      decisionNote: request.decisionNote ?? null,
+      decidedBy: request.decidedBy ?? null,
+      createdAt: request.createdAt,
+      decidedAt: request.decidedAt ?? null,
+    }
+  }
+
+  function createUnmaskRequest(messageId, user, reason) {
+    const request = {
+      requestId: nextRequestId++,
+      messageId,
+      requester: user,
+      reason,
+      status: 'PENDING',
+      decidedBy: null,
+      decidedAt: null,
+      decisionNote: null,
+      createdAt: new Date().toISOString(),
+    }
+    unmaskRequests.set(request.requestId, request)
+    return request
+  }
+
+  return {
+    inspections,
+    createInspection,
+    settleAi,
+    recompute,
+    toRow,
+    toDetail,
+    unmaskRequests,
+    unmaskRow,
+    createUnmaskRequest,
+  }
 }
 
 function send(res, status, body, headers = {}) {
@@ -671,6 +722,82 @@ export function fixtureServer() {
               return send(res, 202, verdict, { Location: `/api/v1/inspections/${inspection.inspectionId}` })
             }
             return send(res, 200, verdict)
+          }
+
+          /*
+           * 마스킹 해제 검토 (D25). 실서버와 같은 조건으로 막는다 — 어긋나면 픽스처
+           * 모드에서만 통과하는 요청이 생긴다.
+           */
+          {
+            const askMatch = path.match(/^\/messages\/(\d+)\/unmask-request$/)
+            if (req.method === 'POST' && askMatch) {
+              if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
+              const user = USERS.find((u) => u.userId === userId)
+              if (!user) return fail(res, 400, 'INVALID_USER', `user ${userId} not found`)
+
+              const messageId = Number(askMatch[1])
+              const body = await readBody(req)
+              const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+              if (reason === '') return fail(res, 400, 'INVALID_REQUEST', '해제 사유를 적어야 합니다.')
+              if (reason.length > 500) return fail(res, 400, 'INVALID_REQUEST', '해제 사유는 500자를 넘을 수 없습니다.')
+
+              const inspection = [...state.inspections.values()].find((i) => i.messageId === messageId)
+              if (!inspection) return fail(res, 404, 'MESSAGE_NOT_FOUND', `message ${messageId}를 찾을 수 없습니다.`)
+              if (inspection.user.userId !== userId) {
+                return fail(res, 403, 'FORBIDDEN_NOT_AUTHOR', '해제 요청은 작성자만 할 수 있습니다.')
+              }
+              if (inspection.status !== 'MASKED') {
+                return fail(res, 409, 'NOT_MASKED', `message ${messageId}는 마스킹된 건이 아닙니다.`)
+              }
+              if ([...state.unmaskRequests.values()].some((r) => r.messageId === messageId)) {
+                return fail(res, 409, 'UNMASK_REQUEST_EXISTS', `message ${messageId}에는 이미 해제 요청이 있습니다.`)
+              }
+
+              const created = state.createUnmaskRequest(messageId, user, reason)
+              return send(res, 201, state.unmaskRow(created, false))
+            }
+
+            if (req.method === 'GET' && path === '/unmask-requests') {
+              if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
+              const user = USERS.find((u) => u.userId === userId)
+              if (!user) return fail(res, 400, 'INVALID_USER', `user ${userId} not found`)
+              if (user.role !== 'SECURITY_ADMIN') {
+                return fail(res, 403, 'FORBIDDEN_ROLE', '해제 요청 목록은 보안 담당자만 볼 수 있습니다.')
+              }
+
+              const status = query.get('status')
+              const items = [...state.unmaskRequests.values()]
+                .filter((r) => !status || r.status === status)
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map((r) => state.unmaskRow(r, true))
+              return send(res, 200, { items, page: 0, size: items.length, total: items.length })
+            }
+
+            const decideMatch = path.match(/^\/unmask-requests\/(\d+)\/decision$/)
+            if (req.method === 'POST' && decideMatch) {
+              if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
+              const user = USERS.find((u) => u.userId === userId)
+              if (!user) return fail(res, 400, 'INVALID_USER', `user ${userId} not found`)
+              if (user.role !== 'SECURITY_ADMIN') {
+                return fail(res, 403, 'FORBIDDEN_ROLE', '확정은 보안 담당자만 할 수 있습니다.')
+              }
+
+              const body = await readBody(req)
+              if (typeof body.approve !== 'boolean') {
+                return fail(res, 400, 'INVALID_REQUEST', 'approve는 true 또는 false여야 합니다.')
+              }
+              const request = state.unmaskRequests.get(Number(decideMatch[1]))
+              if (!request) return fail(res, 404, 'UNMASK_REQUEST_NOT_FOUND', '해제 요청을 찾을 수 없습니다.')
+              if (request.status !== 'PENDING') {
+                return fail(res, 409, 'UNMASK_ALREADY_DECIDED', `이미 ${request.status}로 확정되었습니다.`)
+              }
+
+              request.status = body.approve ? 'APPROVED' : 'REJECTED'
+              request.decidedBy = user.name
+              request.decisionNote = body.note ?? null
+              request.decidedAt = new Date().toISOString()
+              return send(res, 200, state.unmaskRow(request, true))
+            }
           }
 
           if (req.method === 'GET' && path === '/inspections') {
