@@ -153,7 +153,7 @@
 - 202에는 `Location: /api/v1/inspections/{inspectionId}` 헤더가 붙는다.
 - **202 응답에 존재하지 않는 것:** `aiAssessment`, AI findings, `completedAt`. FE가 202 시점에 `aiAssessment`를 참조하면 크래시한다. AI 결과는 `GET /inspections/{id}` 폴링으로만 얻는다.
 - `pollAfterMs`는 서버가 폴링 간격을 지시하는 값이다. FE는 이 값을 쓰고 자체 상수를 쓰지 않는다. 출처는 `gateway.polling.interval-ms`.
-- `policySnapshot`: `{ "policies": [ { "policyId": 1, "code": "P-PII", "version": 3, "ruleCodes": ["PII-RRN-01", "…"] } ] }` — DB에 저장된 스냅샷 그대로다(C9). FE는 `code`·`version`만 읽는다.
+- `policySnapshot`: `{ "policies": [ { "policyId": 1, "code": "P-PII", "version": 4, "ruleCodes": ["PII-RRN-01", "…"] } ] }` — DB에 저장된 스냅샷 그대로다(C9). FE는 `code`·`version`만 읽는다.
 - `ruleResult`: `{ "matches": [ … ], "appliedRuleCodes": [ … ] }` — 상세 shape은 §5 인계 2.
 - `matches[]`와 `appliedRuleCodes[]`는 다르다. 적용된 규칙(로드된 전부)과 매칭된 규칙(finding이 생성된 것)의 차이이며, D1 중첩 억제로 매칭됐으나 finding이 없는 규칙은 `appliedRuleCodes`에만 남는다.
 
@@ -394,7 +394,7 @@ SUGGESTED가 남아 있으면 **아무것도 건드리지 않는다.** 부분 �
 | `inspection_finding.review_comment` | **컬럼 없음.** PATCH의 `comment`는 수신만 하고 저장하지 않는다(§1-7). `data-architect`도 같은 결론을 기록했고, 필요해지면 `V3__*.sql`로 추가한다 |
 | `policy_snapshot` 항목 shape | **조정함 → C9.** DB는 `{policyId, code, version, ruleCodes[]}`를 저장하고 API는 그대로 반환한다 |
 | `rule_result` shape | §4 인계 2와 일치. `matchedKeyword`를 REGEX에서 JSON `null`로 남기는 것까지 동일(C3) |
-| 시드 `version` 값 | `P-PII=3`, `P-SEC=7`, `P-CONF=2` — §4의 `policyVersion` 예시 `P-CONF:2;P-PII:3;P-SEC:7`과 일치 |
+| 시드 `version` 값 | `P-PII=4`, `P-SEC=7`, `P-CONF=2` — §4의 `policyVersion` 예시 `P-CONF:2;P-PII:4;P-SEC:7`과 일치 |
 
 `policySnapshot`을 제외하면 계약을 고칠 것이 없었다.
 
@@ -458,7 +458,7 @@ aiInspectionRunner.schedule(inspection.getId(), new AiInspectionRequest(
         deptCode,            // "SALES"
         categories,          // ["CONFIDENTIAL"]
         hits,                // List<KeywordHit>
-        policyVersion        // "P-CONF:2;P-PII:3;P-SEC:7"
+        policyVersion        // "P-CONF:2;P-PII:4;P-SEC:7"
 ));
 ```
 
@@ -520,7 +520,7 @@ public interface AiResultSink {
 | `departmentCode` | 제출자 부서 code (`DEV`/`SALES`/`HR`) |
 | `categories` | **매칭된 REVIEW 규칙이 속한 정책의 카테고리** 목록. 실질적으로 `["CONFIDENTIAL"]`. 적용된 정책 전체가 아니다 |
 | `hits` | **KEYWORD 규칙(action=REVIEW) 매칭에서만** 생성한다. REGEX 매칭은 넣지 않는다 — PII·SECRET은 AI의 영역이 아니다(9.2 금지 조항). **매칭된 키워드를 전부 담는다**(C4-1): Case B는 `A사`·`차세대` 2건이다. 각 항목은 `KeywordHit(keyword, ruleCode, source)`이며 `source`는 `policy_rule.source` 값(RAG 확장 시 `knowledge_source` 검색 결과로 대체되는 자리) |
-| `policyVersion` | `policySnapshot`의 정책을 `code:version` 쌍으로 만들어 **code 사전순 정렬 후 `;`로 연결**. 예: `P-CONF:2;P-PII:3;P-SEC:7`. 정렬을 고정하는 이유는 Mock의 결정론 때문이다 |
+| `policyVersion` | `policySnapshot`의 정책을 `code:version` 쌍으로 만들어 **code 사전순 정렬 후 `;`로 연결**. 예: `P-CONF:2;P-PII:4;P-SEC:7`. 정렬을 고정하는 이유는 Mock의 결정론 때문이다 |
 
 **`hits`가 비어 있으면 `MockAiInspector`가 `IllegalStateException`을 던진다.** 규칙 엔진이 REVIEW 판정 없이 AI를 호출했다는 뜻이므로 버그다. 조용히 빈 결과를 반환하면 그 버그가 데모까지 살아남는다 (9.5).
 

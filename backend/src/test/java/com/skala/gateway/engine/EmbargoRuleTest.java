@@ -6,6 +6,7 @@ import com.skala.gateway.DemoCases;
 import com.skala.gateway.domain.PolicyRule;
 import com.skala.gateway.domain.enums.FinalDecision;
 import com.skala.gateway.domain.repository.PolicyRuleRepository;
+import com.skala.gateway.service.RosterExpander;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -36,6 +37,9 @@ class EmbargoRuleTest {
     private PolicyRuleRepository policyRuleRepository;
 
     @Autowired
+    private RosterExpander rosterExpander;
+
+    @Autowired
     private RegexMatcher regexMatcher;
 
     @Autowired
@@ -50,7 +54,7 @@ class EmbargoRuleTest {
     @Test
     @DisplayName("Case E — 개발팀이 넣은 백로그가 해제 전 엠바고에 걸려 차단된다")
     void blocksBeforeRelease() {
-        List<PolicyRule> rules = policyRuleRepository.findActiveByDept(DemoCases.DEPT_DEV);
+        List<PolicyRule> rules = rosterExpander.expand(policyRuleRepository.findActiveByDept(DemoCases.DEPT_DEV));
 
         EngineVerdict verdict = ruleEngine.evaluate(DemoCases.CASE_E, rules);
 
@@ -68,7 +72,7 @@ class EmbargoRuleTest {
     @Test
     @DisplayName("Case E-2 — 해제일이 지난 엠바고는 같은 형태인데도 걸리지 않는다")
     void allowsAfterRelease() {
-        List<PolicyRule> rules = policyRuleRepository.findActiveByDept(DemoCases.DEPT_DEV);
+        List<PolicyRule> rules = rosterExpander.expand(policyRuleRepository.findActiveByDept(DemoCases.DEPT_DEV));
 
         EngineVerdict verdict = ruleEngine.evaluate(DemoCases.CASE_E_RELEASED, rules);
 
@@ -81,7 +85,7 @@ class EmbargoRuleTest {
     @Test
     @DisplayName("홍보팀에는 P-EMBARGO가 매핑되지 않아 같은 문장이 통과한다")
     void ownerDepartmentIsNotSubjectToItsOwnEmbargo() {
-        List<PolicyRule> rules = policyRuleRepository.findActiveByDept(DemoCases.DEPT_PR);
+        List<PolicyRule> rules = rosterExpander.expand(policyRuleRepository.findActiveByDept(DemoCases.DEPT_PR));
 
         EngineVerdict verdict = ruleEngine.evaluate(DemoCases.CASE_E, rules);
 
@@ -92,7 +96,7 @@ class EmbargoRuleTest {
     @Test
     @DisplayName("해제일 당일에는 이미 풀린 것이다 — 경계는 today < embargoUntil")
     void releaseDateItselfIsAlreadyReleased() {
-        List<PolicyRule> rules = policyRuleRepository.findActiveByDept(DemoCases.DEPT_DEV);
+        List<PolicyRule> rules = rosterExpander.expand(policyRuleRepository.findActiveByDept(DemoCases.DEPT_DEV));
 
         // 09-19: 아직 하루 남았다
         assertThat(engineAt("2026-09-19").evaluate(DemoCases.CASE_E, rules).decision())

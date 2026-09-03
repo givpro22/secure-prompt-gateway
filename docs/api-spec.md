@@ -398,7 +398,7 @@ AI에 넘기는 `maskedText`와 같으므로 따로 감출 이유가 없다.
   "user": { "userId": 2, "name": "김OO", "department": "영업팀" },
   "submittedText": "A사 차세대 프로젝트 오픈 일정이 언제였지?",
   "status": "PENDING_REVIEW",
-  "policySnapshot": { "policies": [ { "policyId": 1, "code": "P-PII", "version": 3, "ruleCodes": ["…"] },
+  "policySnapshot": { "policies": [ { "policyId": 1, "code": "P-PII", "version": 4, "ruleCodes": ["…"] },
                                     { "policyId": 2, "code": "P-SEC", "version": 7, "ruleCodes": ["…"] },
                                     { "policyId": 3, "code": "P-CONF", "version": 2, "ruleCodes": ["CONF-CLIENT-01"] } ] },
   "ruleResult": { "matches": [ { "code": "CONF-CLIENT-01", "action": "REVIEW", "…": "…" } ] },

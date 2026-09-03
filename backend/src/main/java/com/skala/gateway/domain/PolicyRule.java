@@ -89,6 +89,35 @@ public class PolicyRule {
     protected PolicyRule() {
     }
 
+    /**
+     * ROSTER 규칙을 정규식으로 펼친 <b>비영속</b> 사본 (0.5.1 D23).
+     *
+     * <p>명단은 {@code customer} 테이블에 있고 규칙 행에는 조회할 컬럼명만 있다. 판정 직전에
+     * {@code PolicyService}가 명단을 읽어 이 메서드로 정규식 규칙을 만들어 넘긴다. 덕분에
+     * 엔진은 여전히 REGEX만 알면 되고, 같은 입력에 같은 결과를 내는 순수 함수 성질도 남는다.
+     *
+     * <p><b>절대 저장하지 않는다.</b> {@code ruleId}를 원본과 같게 두는 것은 finding의 FK와
+     * {@code appliedRuleCodes}가 실제 규칙 행을 가리켜야 하기 때문이다. 이 인스턴스를
+     * {@code save}하면 원본 행의 pattern이 펼쳐진 명단으로 덮인다.
+     */
+    public PolicyRule materializedAsRegex(String expandedPattern) {
+        PolicyRule copy = new PolicyRule();
+        copy.ruleId = this.ruleId;
+        copy.policy = this.policy;
+        copy.code = this.code;
+        copy.ruleType = RuleType.REGEX;
+        copy.pattern = expandedPattern;
+        copy.action = this.action;
+        copy.maskLabel = this.maskLabel;
+        copy.severity = this.severity;
+        copy.obligation = this.obligation;
+        copy.source = this.source;
+        copy.description = this.description;
+        copy.embargoUntil = this.embargoUntil;
+        copy.isActive = this.isActive;
+        return copy;
+    }
+
     public Long getRuleId() {
         return ruleId;
     }

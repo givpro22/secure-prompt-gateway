@@ -242,7 +242,7 @@ GATEWAY_EMBARGO_REFERENCE_DATE=2026-09-04 ./gradlew bootRun
 | `_workspace/01_api-ai-architect_contract-freeze.md` | **API 계약 확정본.** 코드가 이 문서와 어긋나면 코드가 틀린 것 |
 | `docs/api-spec.md` · `docs/ai-gateway-v1.postman_collection.json` | API 명세와 실행 가능한 컬렉션 |
 | `docs/screen-spec.md` | 화면 명세 (프레임 8개, 컴포넌트별 데이터 경로) |
-| `docs/erd.dbml` | 8개 테이블 ERD |
+| `docs/erd.dbml` | 9개 테이블 ERD |
 | `docs/demo-files/` | Case E 시연 엑셀과 생성 스크립트 |
 | `docs/demo-script.md` | 발표 진행 대본 |
 | `_workspace/02_frontend-dev_ui-notes.md` | 화면 구현 결정과 API 응답 매핑표 |
