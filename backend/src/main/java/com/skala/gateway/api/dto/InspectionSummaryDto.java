@@ -20,6 +20,8 @@ import java.time.OffsetDateTime;
  */
 public record InspectionSummaryDto(
         Long inspectionId,
+        /** 답변 행을 질문 행에 묶는 열쇠. 같은 메시지의 INPUT/OUTPUT이 이 값을 공유한다 */
+        Long messageId,
         InspectionPhase phase,
         OffsetDateTime createdAt,
         String department,
@@ -41,6 +43,7 @@ public record InspectionSummaryDto(
         boolean output = inspection.getPhase() == InspectionPhase.OUTPUT;
         return new InspectionSummaryDto(
                 inspection.getInspectionId(),
+                message.getMessageId(),
                 inspection.getPhase(),
                 ApiTimes.utc(inspection.getCreatedAt()),
                 message.getUser().getDepartment().getName(),

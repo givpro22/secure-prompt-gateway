@@ -34,6 +34,8 @@ public record InspectionDetailResponse(
         Long messageId,
         InspectionPhase phase,
         InspectionUser user,
+        /** 답변 검사일 때 그 답변이 무엇에 대한 것인지 — 모델에 보낸 마스킹본. 프롬프트 검사면 null */
+        String promptText,
         String submittedText,
         MessageStatus status,
         PolicySnapshot policySnapshot,
@@ -60,6 +62,7 @@ public record InspectionDetailResponse(
                 message.getMessageId(),
                 inspection.getPhase(),
                 InspectionUser.from(message.getUser()),
+                inspection.getPhase() == InspectionPhase.OUTPUT ? message.getSubmittedText() : null,
                 // 답변 검사면 본문도 상태도 답변 쪽 것이다. 프롬프트 행과 같은 필드에 담아 화면이 한 코드로 그린다.
                 inspection.getPhase() == InspectionPhase.OUTPUT ? message.getResponseMasked() : message.getSubmittedText(),
                 inspection.getPhase() == InspectionPhase.OUTPUT

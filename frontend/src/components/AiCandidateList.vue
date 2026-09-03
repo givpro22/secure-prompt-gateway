@@ -33,7 +33,7 @@ function canReview(finding) {
 <template>
   <div class="candidates">
     <p v-if="findings.length === 0" class="caption empty">
-      AI가 제시한 후보가 없습니다.
+      AI 판정 항목이 없습니다.
     </p>
 
     <ul v-else class="list">
