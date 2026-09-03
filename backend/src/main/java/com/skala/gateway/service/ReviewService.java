@@ -10,6 +10,7 @@ import com.skala.gateway.domain.enums.DecidedBy;
 import com.skala.gateway.domain.enums.FinalDecision;
 import com.skala.gateway.domain.enums.UserRole;
 import com.skala.gateway.domain.enums.FindingSource;
+import com.skala.gateway.domain.enums.InspectionPhase;
 import com.skala.gateway.domain.enums.MessageStatus;
 import com.skala.gateway.domain.enums.ReviewStatus;
 import com.skala.gateway.domain.repository.AppUserRepository;
@@ -157,9 +158,13 @@ public class ReviewService {
         // completedAt은 AI 완료 시각에서 사람의 확정 시각으로 갱신된다 (계약서 §1-7).
         // 감사 화면의 "완료" 시각은 판정이 끝난 시점이고, REVIEW 건에서 그것은 사람이 누른 순간이다.
         inspection.setCompletedAt(OffsetDateTime.now());
-        inspection.getMessage().setStatus(decision == FinalDecision.BLOCK
-                ? MessageStatus.BLOCKED
-                : MessageStatus.ALLOWED);
+        // 답변 검사(phase=OUTPUT)의 확정은 그 검사에만 남는다. message.status는 프롬프트의
+        // 판정이라 답변 때문에 바뀌면 감사 목록의 프롬프트 행이 거짓이 된다 (UC-08).
+        if (inspection.getPhase() != InspectionPhase.OUTPUT) {
+            inspection.getMessage().setStatus(decision == FinalDecision.BLOCK
+                    ? MessageStatus.BLOCKED
+                    : MessageStatus.ALLOWED);
+        }
         // message.submitted_text는 어느 쪽으로도 건드리지 않는다 (0.5 D14). 클래스 javadoc 참조.
     }
 

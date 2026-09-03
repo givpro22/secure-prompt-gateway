@@ -5,6 +5,8 @@ import com.skala.gateway.ai.AiInspectionRunner;
 import com.skala.gateway.api.dto.InspectionDetailResponse;
 import com.skala.gateway.api.dto.InspectionSummaryDto;
 import com.skala.gateway.api.ApiException;
+import com.skala.gateway.domain.enums.PolicyCategory;
+import com.skala.gateway.ai.AiAssessment;
 import com.skala.gateway.api.dto.ResponseVerdictResponse;
 import com.skala.gateway.domain.enums.InspectionPhase;
 import com.skala.gateway.api.dto.MessageVerdictResponse;
@@ -58,6 +60,7 @@ public class InspectionService {
     private final InspectionFindingRepository findingRepository;
     private final PolicyService policyService;
     private final RuleEngine ruleEngine;
+    private final AnswerLeakService answerLeakService;
     private final AiInspectionRunner aiInspectionRunner;
     private final int pollAfterMs;
 
@@ -68,13 +71,15 @@ public class InspectionService {
                              PolicyService policyService,
                              RuleEngine ruleEngine,
                              AiInspectionRunner aiInspectionRunner,
-                             @Value("${gateway.polling.interval-ms}") int pollAfterMs) {
+                             @Value("${gateway.polling.interval-ms}") int pollAfterMs,
+                             AnswerLeakService answerLeakService) {
         this.appUserRepository = appUserRepository;
         this.messageRepository = messageRepository;
         this.inspectionRepository = inspectionRepository;
         this.findingRepository = findingRepository;
         this.policyService = policyService;
         this.ruleEngine = ruleEngine;
+        this.answerLeakService = answerLeakService;
         this.aiInspectionRunner = aiInspectionRunner;
         this.pollAfterMs = pollAfterMs;
     }
@@ -193,8 +198,34 @@ public class InspectionService {
             scheduleAiInspection(inspection, user, verdict, context);
         }
 
+        /*
+         * 유출 검사 (UC-08 후단). 규칙이 차단하지 않은 답변은 한 번 더 본다 — 가렸던 값이
+         * 되살아났는지(규칙), 사내 정보가 섞였는지(LLM, 프로파일에 따라). 의심이 있으면
+         * 검토 대기로 돌리고 담당자에게 제안으로 넘긴다. 확정은 사람이 한다.
+         *
+         * 원문은 이 호출 안에서만 쓰이고 검사기 밖으로 나가지 않는다.
+         */
+        if (decision != FinalDecision.BLOCK && !pending) {
+            AiAssessment leak = answerLeakService.check(
+                    message.getOriginalText(), message.getSubmittedText(), text,
+                    user.getDepartment().getCode());
+            inspection.setAiResult(leak);
+            inspection.setAiStatus(AiStatus.COMPLETED);
+            if (leak.reviewRequired()) {
+                inspection.setFinalDecision(FinalDecision.PENDING);
+                inspection.setDecidedBy(null);
+                inspection.setCompletedAt(null);
+                for (AiAssessment.RiskCandidate c : leak.riskCandidates()) {
+                    findingRepository.save(InspectionFinding.ofAi(
+                            inspection, c.code(), PolicyCategory.CONFIDENTIAL, c.rationale(), c.evidence()));
+                }
+                pending = true;
+                log.info("답변 유출 의심 messageId={} 후보 {}건 → 검토 대기", messageId, leak.riskCandidates().size());
+            }
+        }
+
         log.info("출력 검사 messageId={} decision={} 규칙={}건",
-                messageId, decision, verdict.findings().size());
+                messageId, inspection.getFinalDecision(), verdict.findings().size());
         return ResponseVerdictResponse.of(message, inspection, pending ? pollAfterMs : null);
     }
 
@@ -234,11 +265,11 @@ public class InspectionService {
      * 행마다 count 쿼리를 날리면 20행에 20쿼리다.
      */
     @Transactional(readOnly = true)
-    public PageEnvelope<InspectionSummaryDto> list(Long deptId, MessageStatus status,
+    public PageEnvelope<InspectionSummaryDto> list(Long deptId, MessageStatus status, InspectionPhase phase,
                                                    OffsetDateTime from, OffsetDateTime to,
                                                    int page, int size) {
         Page<Inspection> found = inspectionRepository.findAll(
-                InspectionSpecs.of(deptId, status, from, to),
+                InspectionSpecs.of(deptId, status, phase, from, to),
                 PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE), InspectionSpecs.DEFAULT_SORT));
 
         Map<Long, Long> ruleCounts = ruleCounts(found.getContent().stream()

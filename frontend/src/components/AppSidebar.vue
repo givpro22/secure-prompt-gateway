@@ -62,6 +62,20 @@ const DEMO_HISTORY = [
         ],
       },
       {
+        // 개발팀이 오류 난 코드를 붙여 넣는 흔한 장면. 개인정보는 없고 사내 IP만 가려진다.
+        // 모델이 고친 코드를 통째로 돌려주면 사내 코드가 외부를 한 바퀴 돈 것이다 —
+        // 출력 검사의 코드 되돌림 검사가 이것을 잡아 담당자에게 넘긴다 (UC-08).
+        key: 'd6',
+        decision: 'MASK',
+        text: '결제 재시도 NPE 디버깅',
+        prompts: [
+          '결제 재시도에서 NPE 나는데 봐줘.\nRetryPolicy policy = config.getRetryPolicy();\nint max = policy.getMaxAttempts();\nclient.connect("10.0.3.21", 5432);',
+        ],
+        answers: [
+          'policy가 null일 수 있습니다. getRetryPolicy()가 설정이 없을 때 null을 돌려주는지 확인하고, 기본값으로 막으세요.\n\nRetryPolicy policy = config.getRetryPolicy();\nif (policy == null) policy = RetryPolicy.defaults();\nint max = policy.getMaxAttempts();\nclient.connect("[내부IP]", 5432);\n\n연결 대상은 [내부IP]로 가려져 있어 그대로 뒀습니다.',
+        ],
+      },
+      {
         // 이 서비스가 무엇을 하는지 가장 잘 보여주는 대화다.
         // 차단당하고 → 문제가 된 부분을 빼고 다시 보내 → 통과한다.
         key: 'd3',

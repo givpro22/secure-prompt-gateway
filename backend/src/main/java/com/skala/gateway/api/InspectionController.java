@@ -1,6 +1,7 @@
 package com.skala.gateway.api;
 
 import com.skala.gateway.api.dto.ErrorResponse;
+import com.skala.gateway.domain.enums.InspectionPhase;
 import com.skala.gateway.domain.enums.MessageStatus;
 import com.skala.gateway.service.InspectionService;
 import java.time.OffsetDateTime;
@@ -47,12 +48,14 @@ public class InspectionController {
     @GetMapping("/inspections")
     public ResponseEntity<?> list(@RequestParam(required = false) String deptId,
                                   @RequestParam(required = false) String status,
+                                  @RequestParam(required = false) String phase,
                                   @RequestParam(required = false) String from,
                                   @RequestParam(required = false) String to,
                                   @RequestParam(required = false) String page,
                                   @RequestParam(required = false) String size) {
         Long parsedDeptId;
         MessageStatus parsedStatus;
+        InspectionPhase parsedPhase;
         OffsetDateTime parsedFrom;
         OffsetDateTime parsedTo;
         int parsedPage;
@@ -60,6 +63,7 @@ public class InspectionController {
         try {
             parsedDeptId = QueryParams.optionalLong(deptId);
             parsedStatus = parseStatus(status);
+            parsedPhase = parsePhase(phase);
             parsedFrom = QueryParams.optionalTime(from);
             parsedTo = QueryParams.optionalTime(to);
             parsedPage = QueryParams.intOrDefault(page, DEFAULT_PAGE);
@@ -74,7 +78,7 @@ public class InspectionController {
         }
 
         return ResponseEntity.ok(inspectionService.list(
-                parsedDeptId, parsedStatus, parsedFrom, parsedTo, parsedPage, parsedSize));
+                parsedDeptId, parsedStatus, parsedPhase, parsedFrom, parsedTo, parsedPage, parsedSize));
     }
 
     /** 판정 상세. 202 이후 FE 폴링이 이 엔드포인트를 {@code aiStatus}가 끝날 때까지 호출한다. */
@@ -93,6 +97,18 @@ public class InspectionController {
             return MessageStatus.valueOf(raw.trim());
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("status는 ALLOWED/MASKED/BLOCKED/PENDING_REVIEW 중 하나여야 합니다: " + raw);
+        }
+    }
+
+    /** {@code phase=INPUT|OUTPUT}. 없으면 둘 다. 답변 검사만 보려는 담당자 폴링이 쓴다 */
+    private static InspectionPhase parsePhase(String phase) {
+        if (phase == null || phase.isBlank()) {
+            return null;
+        }
+        try {
+            return InspectionPhase.valueOf(phase.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.invalidParameter("phase는 INPUT 또는 OUTPUT이어야 합니다.");
         }
     }
 }

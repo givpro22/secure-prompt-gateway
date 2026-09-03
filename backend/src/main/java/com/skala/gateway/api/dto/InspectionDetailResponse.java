@@ -60,8 +60,10 @@ public record InspectionDetailResponse(
                 message.getMessageId(),
                 inspection.getPhase(),
                 InspectionUser.from(message.getUser()),
-                message.getSubmittedText(),
-                message.getStatus(),
+                // 답변 검사면 본문도 상태도 답변 쪽 것이다. 프롬프트 행과 같은 필드에 담아 화면이 한 코드로 그린다.
+                inspection.getPhase() == InspectionPhase.OUTPUT ? message.getResponseMasked() : message.getSubmittedText(),
+                inspection.getPhase() == InspectionPhase.OUTPUT
+                        ? InspectionSummaryDto.statusOf(inspection.getFinalDecision()) : message.getStatus(),
                 inspection.getPolicySnapshot(),
                 inspection.getRuleResult(),
                 inspection.getAiStatus(),
