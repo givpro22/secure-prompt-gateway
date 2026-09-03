@@ -258,12 +258,18 @@ function evaluate(text, deptId) {
     (m) => !raw.some((other) => other !== m && other.start <= m.start && other.end >= m.end && (other.end - other.start) > (m.end - m.start)),
   )
 
-  // D9 — finding은 규칙당 1건, matchedKeyword는 첫 매칭
-  const byRule = new Map()
-  for (const m of kept.sort((a, b) => a.start - b.start)) {
-    if (!byRule.has(m.rule.code)) byRule.set(m.rule.code, m)
-  }
-  const matched = [...byRule.values()].sort((a, b) => a.start - b.start)
+  // D9 — finding은 **KEYWORD 규칙만** 규칙당 1건이고 matchedKeyword는 첫 매칭이다.
+  // REGEX는 매칭마다 만든다(백엔드 RegexMatcher와 같다). 전에는 REGEX가 한 문장에서
+  // 두 번 걸리는 데모 입력이 없어서 이 구분이 드러나지 않았는데, 고객 명단 규칙이
+  // 여러 명을 잡으면서 갈렸다 — 마스킹은 전부 되는데 목록엔 1건만 뜨는 상태였다.
+  const sorted = kept.slice().sort((a, b) => a.start - b.start)
+  const seenKeywordRule = new Set()
+  const matched = sorted.filter((m) => {
+    if (m.rule.ruleType !== 'KEYWORD') return true
+    if (seenKeywordRule.has(m.rule.code)) return false
+    seenKeywordRule.add(m.rule.code)
+    return true
+  })
 
   const actions = new Set(matched.map((m) => m.rule.action))
   let decision = 'ALLOW'

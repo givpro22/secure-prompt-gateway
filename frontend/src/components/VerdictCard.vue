@@ -73,7 +73,11 @@ const summary = computed(() => {
 
     <!-- 허용은 규칙 0건이라 표를 그리지 않고 1줄로 축약한다 (화면 명세 2.2 S2) -->
     <ul v-if="!isAllow && matches.length > 0" class="rules">
-      <li v-for="match in matches" :key="match.code" class="rule">
+      <!--
+           key에 span을 붙인다. 같은 규칙이 여러 번 걸릴 수 있어 code만으로는 중복된다 —
+           고객 명단 규칙이 한 문장에서 여러 명을 잡는 경우가 그것이다.
+        -->
+        <li v-for="match in matches" :key="`${match.code}:${match.span?.[0]}`" class="rule">
         <span class="code">{{ match.code }}</span>
         <span class="category">{{ term(CATEGORY_TERMS, match.category) }}</span>
         <span class="action" :class="`action-${(match.action ?? '').toLowerCase()}`">
