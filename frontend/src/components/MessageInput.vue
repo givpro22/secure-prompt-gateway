@@ -124,27 +124,33 @@ function onKeydown(event) {
       @change="onFile"
     />
 
-    <!-- 상용 챗과 같은 자리, 같은 모양. 처음 보는 사람도 여기를 누른다 -->
-    <button
-      type="button"
-      class="plus"
-      :disabled="disabled || reading"
-      :aria-label="reading ? '읽는 중' : '표 파일 첨부'"
-      title="표 파일에서 텍스트만 뽑아 입력창에 넣습니다. 파일 자체는 전송되지 않습니다."
-      @click="pick"
-    >
-      <span v-if="reading" class="spin" aria-hidden="true" />
-      <span v-else aria-hidden="true">＋</span>
-    </button>
+    <!-- ＋는 입력창 안에 있다. 상용 챗이 다 그 자리라 처음 보는 사람도 거기를 누른다 -->
+    <div class="field">
+      <button
+        type="button"
+        class="plus"
+        :disabled="disabled || reading"
+        :aria-label="reading ? '읽는 중' : '표 파일 첨부'"
+        title="표 파일에서 텍스트만 뽑아 입력창에 넣습니다. 파일 자체는 전송되지 않습니다."
+        @click="pick"
+      >
+        <span v-if="reading" class="spin" aria-hidden="true" />
+        <span v-else aria-hidden="true">＋</span>
+      </button>
 
-    <textarea
-      rows="3"
-      :value="modelValue"
-      :disabled="disabled"
-      placeholder="AI에게 보낼 프롬프트를 입력하세요. (Enter 전송, Shift + Enter 줄바꿈)"
-      @input="emit('update:modelValue', $event.target.value)"
-      @keydown="onKeydown"
-    />
+      <textarea
+        rows="3"
+        :value="modelValue"
+        :disabled="disabled"
+        placeholder="AI에게 보낼 프롬프트를 입력하세요. (Enter 전송, Shift + Enter 줄바꿈)"
+        @input="emit('update:modelValue', $event.target.value)"
+        @keydown="onKeydown"
+      />
+
+      <div v-if="dropping" class="drop-veil">
+        여기에 놓으면 표에서 텍스트만 뽑습니다 · 파일은 전송되지 않습니다
+      </div>
+    </div>
     <button
       type="button"
       class="send"
@@ -154,9 +160,6 @@ function onKeydown(event) {
       {{ disabled ? '전송 중…' : '전송' }}
     </button>
 
-    <div v-if="dropping" class="drop-veil">
-      여기에 놓으면 표에서 텍스트만 뽑습니다 · 파일은 전송되지 않습니다
-    </div>
   </div>
 
   <p v-if="fileError" class="file-error">{{ fileError }}</p>
@@ -174,31 +177,31 @@ function onKeydown(event) {
   display: none;
 }
 
-/* 상용 챗의 그 자리 — 입력창 왼쪽, 동그란 ＋ */
+/*
+ * 상용 챗의 그 자리 — 입력창 **안** 왼쪽 아래. 테두리 없는 동그라미로 두어 입력창
+ * 안의 도구처럼 보이게 한다. 테두리를 주면 상자 안에 상자가 하나 더 생긴다.
+ */
 .plus {
-  align-self: flex-end;
-  flex: none;
-  width: 38px;
-  height: 38px;
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: 50%;
-  background: #fff;
-  color: var(--navy);
+  background: transparent;
+  color: var(--gray);
   font-size: 19px;
   line-height: 1;
   cursor: pointer;
 }
 
 .plus:hover:not(:disabled) {
-  border-color: var(--blue);
+  background: var(--card);
   color: var(--blue);
-}
-
-.plus:disabled {
-  color: var(--gray);
-  cursor: default;
 }
 
 .spin {
@@ -221,6 +224,10 @@ function onKeydown(event) {
   border-color: var(--blue);
 }
 
+.plus:disabled {
+  color: var(--border-strong);
+}
+
 .drop-veil {
   position: absolute;
   inset: 0;
@@ -240,9 +247,17 @@ function onKeydown(event) {
   font-size: 12.5px;
 }
 
+/* ＋가 입력창 안에 앉으므로 테두리는 이 상자가 갖는다 */
+.field {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
 textarea {
   flex: 1;
-  padding: 10px 12px;
+  /* 왼쪽은 ＋ 자리만큼 비운다. 글자가 버튼 위로 흐르지 않게 */
+  padding: 10px 12px 10px 46px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   resize: vertical;
