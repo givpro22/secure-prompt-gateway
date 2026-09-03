@@ -112,9 +112,11 @@ public class MessageController {
     /** {@code GET /api/v1/messages/answer/available} — 화면이 버튼을 그릴지 정하는 데 쓴다 */
     @GetMapping("/messages/answer/available")
     public java.util.Map<String, Object> answerAvailable() {
+        // Map.of는 null을 거부한다. 제공자 이름이 비어 있어도 응답은 나가야 한다.
+        String provider = answerService.enabled() ? answerService.providerName() : null;
         return java.util.Map.of(
                 "available", answerService.enabled(),
-                "provider", answerService.enabled() ? answerService.providerName() : "");
+                "provider", provider == null ? "" : provider);
     }
 
     /**

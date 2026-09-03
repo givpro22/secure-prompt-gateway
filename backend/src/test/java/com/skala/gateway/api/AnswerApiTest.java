@@ -115,11 +115,27 @@ class AnswerApiTest {
     @DisplayName("가용 여부 조회 — 키 유무를 그대로 돌려준다")
     void availabilityEndpoint() throws Exception {
         when(claude.enabled()).thenReturn(true);
+        when(claude.providerName()).thenReturn("테스트 제공자");
 
         MvcResult result = mockMvc.perform(get("/api/v1/messages/answer/available")
                 .header("X-User-Id", EMPLOYEE)).andReturn();
 
-        assertThat(json(result).path("available").asBoolean()).isTrue();
+        JsonNode body = json(result);
+        assertThat(body.path("available").asBoolean()).isTrue();
+        assertThat(body.path("provider").asText()).isEqualTo("테스트 제공자");
+    }
+
+    @Test
+    @DisplayName("제공자 이름이 비어도 가용 여부 응답은 나간다 — Map.of의 null 거부에 걸리지 않는다")
+    void availabilityWithoutProviderName() throws Exception {
+        when(claude.enabled()).thenReturn(true);
+        when(claude.providerName()).thenReturn(null);
+
+        MvcResult result = mockMvc.perform(get("/api/v1/messages/answer/available")
+                .header("X-User-Id", EMPLOYEE)).andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(json(result).path("provider").asText()).isEmpty();
     }
 
     @Test
