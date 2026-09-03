@@ -5,7 +5,7 @@
  * 값은 부모(ChatView)가 들고 있다. S4 차단 시 입력창에 원문을 복원해야 하는데,
  * 그 원문은 서버 응답이 아니라 클라이언트가 들고 있던 입력값이기 때문이다 (화면 명세 2.4-5).
  */
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ACCEPT_ATTR,
   ACCEPT_LABEL,
@@ -55,20 +55,59 @@ function onFile(event) {
 const dropDepth = ref(0)
 const dropping = computed(() => dropDepth.value > 0)
 
-function onDragEnter(event) {
-  if (![...(event.dataTransfer?.types ?? [])].includes('Files')) return
+/** 파일을 끌고 오는 중인가. 글자를 끌 때는(textarea 안 선택 이동) 끼어들지 않는다 */
+function hasFiles(event) {
+  return [...(event.dataTransfer?.types ?? [])].includes('Files')
+}
+
+/*
+ * 받는 자리는 **창 전체**다.
+ *
+ * 입력창 위에만 걸었더니 조금만 빗나가도 브라우저가 그 파일을 열어 화면이 통째로
+ * 바뀌었다. 끌어다 놓는 사람은 창 가운데를 겨냥하지 입력창을 겨냥하지 않는다.
+ *
+ * 창 어디에 놓아도 받고, 어디에 놓아도 브라우저가 파일을 열지 않게 막는다 — 이 화면에
+ * 파일을 떨어뜨릴 다른 자리는 없다.
+ */
+function onWindowDragEnter(event) {
+  if (!hasFiles(event)) return
+  event.preventDefault()
   dropDepth.value += 1
 }
 
-function onDragLeave() {
+function onWindowDragOver(event) {
+  if (!hasFiles(event)) return
+  // 이걸 막지 않으면 놓는 순간 브라우저가 파일을 연다
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function onWindowDragLeave(event) {
+  if (!hasFiles(event)) return
   dropDepth.value = Math.max(0, dropDepth.value - 1)
 }
 
-function onDrop(event) {
+function onWindowDrop(event) {
+  if (!hasFiles(event)) return
+  event.preventDefault()
   dropDepth.value = 0
   const file = event.dataTransfer?.files?.[0]
   if (file) handleFile(file)
 }
+
+onMounted(() => {
+  window.addEventListener('dragenter', onWindowDragEnter)
+  window.addEventListener('dragover', onWindowDragOver)
+  window.addEventListener('dragleave', onWindowDragLeave)
+  window.addEventListener('drop', onWindowDrop)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('dragenter', onWindowDragEnter)
+  window.removeEventListener('dragover', onWindowDragOver)
+  window.removeEventListener('dragleave', onWindowDragLeave)
+  window.removeEventListener('drop', onWindowDrop)
+})
 
 async function handleFile(file) {
   if (props.disabled || reading.value) return
@@ -115,14 +154,7 @@ function onKeydown(event) {
 </script>
 
 <template>
-  <div
-    class="message-input"
-    :class="{ dropping }"
-    @dragenter.prevent="onDragEnter"
-    @dragover.prevent
-    @dragleave="onDragLeave"
-    @drop.prevent="onDrop"
-  >
+  <div class="message-input" :class="{ dropping }">
     <input
       ref="picker"
       type="file"
@@ -174,9 +206,6 @@ function onKeydown(event) {
         </span>
       </div>
 
-      <div v-if="dropping" class="drop-veil">
-        여기에 놓으면 표에서 텍스트만 뽑습니다 · 파일은 전송되지 않습니다
-      </div>
     </div>
     <button
       type="button"
@@ -190,6 +219,21 @@ function onKeydown(event) {
   </div>
 
   <p v-if="fileError" class="file-error">{{ fileError }}</p>
+
+  <!--
+    받는 자리가 창 전체이므로 안내도 창 전체에 띄운다. 입력창에만 작게 띄우면
+    "저기까지 가져가야 하나" 싶어 사람이 다시 조준한다.
+  -->
+  <Teleport to="body">
+    <Transition name="veil">
+      <div v-if="dropping" class="drop-veil">
+        <div class="drop-card">
+          <span class="drop-title">여기에 놓으세요</span>
+          <span class="drop-sub">표에서 텍스트만 뽑아 입력창에 넣습니다 · 파일은 전송되지 않습니다</span>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -252,17 +296,62 @@ function onKeydown(event) {
   color: var(--border-strong);
 }
 
+/* 아래는 body로 옮겨 그리는 판이라 scoped 밖에 둔다 */
+</style>
+
+<style>
 .drop-veil {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 60;
   display: grid;
   place-items: center;
-  border: 2px dashed var(--blue);
-  border-radius: 8px;
-  background: rgb(255 255 255 / 92%);
-  color: var(--blue);
-  font-size: 13px;
+  background: rgb(22 32 46 / 34%);
+  /* 마우스를 가로채면 안 된다. 이 판 아래로 drop 이벤트가 그대로 지나가야 한다 */
   pointer-events: none;
+}
+
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 26px 34px;
+  border: 2px dashed var(--blue);
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+}
+
+.drop-title {
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.drop-sub {
+  color: var(--gray);
+  font-size: 12.5px;
+}
+
+.veil-enter-active,
+.veil-leave-active {
+  transition: opacity 0.14s ease;
+}
+
+.veil-enter-active .drop-card,
+.veil-leave-active .drop-card {
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.veil-enter-from,
+.veil-leave-to {
+  opacity: 0;
+}
+
+.veil-enter-from .drop-card,
+.veil-leave-to .drop-card {
+  transform: scale(0.96);
 }
 
 .file-error {
