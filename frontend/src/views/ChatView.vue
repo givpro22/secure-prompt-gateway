@@ -395,8 +395,9 @@ function isHumanDecided(entry) {
   flex-direction: column;
   gap: 8px;
   align-items: center;
+  margin: 0;
+  padding: 24px 0;
   text-align: center;
-  padding: 8px 0 4px;
 }
 
 .hello {
@@ -482,11 +483,6 @@ function isHumanDecided(entry) {
   align-content: start;
 }
 
-.empty {
-  margin: 0;
-  padding: 24px 0;
-  text-align: center;
-}
 
 .turn {
   display: block;

@@ -2,11 +2,15 @@
 /*
  * 상용 서비스 마크.
  *
- * 각 서비스 로고를 단순화한 도형이며 **원본 브랜드 자산이 아니다** — 목록에서
- * 서비스를 알아보게 하는 용도다. 정식 배포물에는 각 사 브랜드 가이드의 자산을
- * 받아 교체해야 한다.
+ * 윤곽선은 각 사 로고 이미지를 추적한 것이다 (`llmMarkPaths.js`).
+ *
+ * Gemini만 칠하는 방식이 다르다. 원본은 위 빨강·왼 노랑·아래 초록·오른 파랑으로
+ * 색이 한 바퀴 도는데, SVG 선형 그라디언트로는 축이 하나뿐이라 이 회전을 담지
+ * 못한다. 그래서 같은 별을 두 번 그리고 왼쪽 반과 오른쪽 반에 세로 그라디언트를
+ * 따로 걸었다 — 가운데 색만 노랑/파랑으로 갈린다.
  */
 import { computed } from 'vue'
+import { CHATGPT_MARK, CLAUDE_MARK, GEMINI_MARK, GROK_MARK } from './llmMarkPaths'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -14,52 +18,22 @@ const props = defineProps({
 })
 
 const MARKS = {
-  chatgpt: {
-    color: '#111827',
-    paths: [
-      // 육각 매듭 로제트 외곽
-      {
-        d: 'M8 1.9a2.9 2.9 0 0 1 2.5 1.45 2.9 2.9 0 0 1 3.55 4.15 2.9 2.9 0 0 1-2.5 4.35 2.9 2.9 0 0 1-5.1 0A2.9 2.9 0 0 1 1.95 7.5 2.9 2.9 0 0 1 5.5 3.35 2.9 2.9 0 0 1 8 1.9Z',
-        stroke: true,
-      },
-      // 매듭이 겹치는 안쪽 육각형
-      { d: 'M8 5.2 10.4 6.6v2.8L8 10.8 5.6 9.4V6.6L8 5.2Z', stroke: true },
-    ],
-  },
-  claude: {
-    color: '#d97757',
-    paths: [
-      // 길이가 제각각인 방사형 다발
-      {
-        d: 'M7.4 1.2h1.2l.35 5.1 2.5-3.5.95.7-1.95 4 4.1-1.6.42 1.1-4.4 1.1 4.15.75-.2 1.15-4.2-.6 3.25 3.1-.85.85-2.9-3.4.55 4.4-1.2.2-.85-4.5-1.5 4.2-1.1-.45 1.35-4.3-3.2 2.9-.8-.9 3.35-3-4.4 1.05-.3-1.15 4.35-.85-4.5-.6.1-1.2 4.6.2-3.6-2.5.7-.95 3.9 2.4-1.7-4.2Z',
-      },
-    ],
-  },
+  chatgpt: { d: CHATGPT_MARK, color: '#0f172a' },
+  claude: { d: CLAUDE_MARK, color: '#d97757' },
+  grok: { d: GROK_MARK, color: '#0f172a' },
   gemini: {
-    // 빨강 → 노랑 → 초록 → 파랑
-    gradient: ['#ea4335', '#fbbc04', '#34a853', '#4285f4'],
-    paths: [
-      // 오목한 네 꼭짓점 별
-      { d: 'M8 0c.62 4.4 3.6 7.38 8 8-4.4.62-7.38 3.6-8 8-.62-4.4-3.6-7.38-8-8 4.4-.62 7.38-3.6 8-8Z' },
-    ],
-  },
-  grok: {
-    color: '#111827',
-    paths: [
-      // 고리
-      {
-        d: 'M8 2.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm0 1.7a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z',
-        evenodd: true,
-      },
-      // 고리를 가로지르는 뾰족한 사선
-      { d: 'M15.6.4 6.1 8.9.4 15.6l8.2-6.4L15.6.4Z' },
-    ],
+    d: GEMINI_MARK,
+    split: {
+      left: ['#ea4335', '#fbbc04', '#34a853'],
+      right: ['#ea4335', '#4285f4', '#34a853'],
+    },
   },
 }
 
 const mark = computed(() => MARKS[props.id] ?? MARKS.chatgpt)
-/** 그라디언트 id가 문서 안에서 겹치지 않게 서비스 이름으로 고정한다 */
-const gradientId = computed(() => `llm-grad-${props.id}`)
+/** id가 문서 안에서 겹치지 않게 서비스 이름으로 고정한다 */
+const uid = computed(() => `llm-${props.id}`)
+const stopOffset = (i, n) => `${(i / (n - 1)) * 100}%`
 </script>
 
 <template>
@@ -71,26 +45,37 @@ const gradientId = computed(() => `llm-grad-${props.id}`)
     aria-hidden="true"
     focusable="false"
   >
-    <defs v-if="mark.gradient">
-      <linearGradient :id="gradientId" x1="0" y1="0" x2="1" y2="1">
-        <stop
-          v-for="(c, i) in mark.gradient"
-          :key="c"
-          :offset="`${(i / (mark.gradient.length - 1)) * 100}%`"
-          :stop-color="c"
-        />
-      </linearGradient>
-    </defs>
-    <path
-      v-for="(p, i) in mark.paths"
-      :key="i"
-      :d="p.d"
-      :fill="p.stroke ? 'none' : mark.gradient ? `url(#${gradientId})` : mark.color"
-      :stroke="p.stroke ? mark.color : 'none'"
-      :stroke-width="p.stroke ? 1.25 : 0"
-      stroke-linejoin="round"
-      :fill-rule="p.evenodd ? 'evenodd' : 'nonzero'"
-    />
+    <template v-if="mark.split">
+      <defs>
+        <linearGradient
+          v-for="(stops, side) in mark.split"
+          :id="`${uid}-${side}`"
+          :key="side"
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="1"
+        >
+          <stop
+            v-for="(c, i) in stops"
+            :key="c"
+            :offset="stopOffset(i, stops.length)"
+            :stop-color="c"
+          />
+        </linearGradient>
+        <clipPath :id="`${uid}-clip-left`"><rect x="0" y="0" width="8" height="16" /></clipPath>
+        <clipPath :id="`${uid}-clip-right`"><rect x="8" y="0" width="8" height="16" /></clipPath>
+      </defs>
+      <path
+        v-for="side in ['left', 'right']"
+        :key="side"
+        :d="mark.d"
+        :fill="`url(#${uid}-${side})`"
+        :clip-path="`url(#${uid}-clip-${side})`"
+        fill-rule="evenodd"
+      />
+    </template>
+    <path v-else :d="mark.d" :fill="mark.color" fill-rule="evenodd" />
   </svg>
 </template>
 

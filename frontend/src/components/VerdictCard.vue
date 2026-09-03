@@ -74,9 +74,23 @@ const changedText = computed(() => {
   return sent
 })
 
+/*
+ * 상용 LLM은 게이트웨이가 대신 호출하지 않는다 (기획서 0.3 — 실제 LLM 호출은 범위 밖).
+ * 서버가 API 키로 부르는 것이 아니라, 승인된 본문을 그 서비스의 입력창까지 실어
+ * 보내고 나머지는 사람이 한다.
+ *
+ * `prefill`이 있는 서비스는 주소 쿼리로 본문을 넘긴다. ChatGPT는 그대로 전송까지
+ * 가고 Claude는 입력창에 채워진다. Gemini와 Grok은 같은 용도의 파라미터를 공개하지
+ * 않아 클립보드로만 넘긴다.
+ *
+ * 대가가 있다. 본문이 주소창에 실리므로 브라우저 기록과 리퍼러에 한 번 더 남는다.
+ * 게이트웨이가 승인한 본문이고 목적지도 어차피 그 서비스지만, 통제한 경로 밖에
+ * 사본이 하나 더 생기는 것은 맞다. 클립보드 복사는 그대로 하므로 이 경로가 막힌
+ * 환경에서도 붙여넣을 수 있다.
+ */
 const EXTERNAL_LLMS = [
-  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/' },
-  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new' },
+  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', prefill: 'q' },
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', prefill: 'q' },
   { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app' },
   { id: 'grok', name: 'Grok', url: 'https://grok.com/' },
 ]
