@@ -20,6 +20,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
  * 마스킹 해제 검토 (D25).
  *
@@ -109,6 +111,25 @@ public class UnmaskService {
         return unmaskRepository.findByMessage_MessageId(messageId)
                 .map(UnmaskRequestDto::forRequester)
                 .orElseThrow(() -> ApiException.unmaskRequestNotFound(messageId));
+    }
+
+    /**
+     * 내가 올린 요청 전부 (D25).
+     *
+     * <p>원문은 싣지 않는다 — {@link #mine} 과 같은 이유다. 자기 문장은 화면이 이미 알고
+     * 있고, 필요한 것은 담당자가 무엇으로 정했는지다.
+     *
+     * <p>목록을 따로 여는 이유는 알림 때문이다. 확정 시점은 요청자가 알 수 없으므로
+     * 화면이 물어야 하는데, 메시지 하나씩 묻는 방식은 화면이 그 messageId를 기억하고
+     * 있을 때만 된다. 새로고침하거나 다른 자리에서 올린 요청은 그 기억 밖이라 확정이
+     * 나도 돌아가지 않았다.
+     */
+    @Transactional(readOnly = true)
+    public List<UnmaskRequestDto> mineAll(Long userId) {
+        appUserRepository.findById(userId).orElseThrow(() -> ApiException.invalidUser(userId));
+        return unmaskRepository.findMine(userId).stream()
+                .map(UnmaskRequestDto::forRequester)
+                .toList();
     }
 
     /**

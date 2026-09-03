@@ -24,6 +24,23 @@ export const MAX_CHARS = 4000
 const SHEET_EXT = /\.(xlsx|xlsm|xls)$/i
 const TEXT_EXT = /\.(csv|tsv|txt)$/i
 
+/*
+ * 받는 형식은 여기 하나로 정한다. input의 accept, 화면 안내, 검사 셋이 갈리면
+ * 고를 수는 있는데 거절당하는 파일이 생긴다.
+ */
+export const ACCEPT_EXT = ['.xlsx', '.xlsm', '.xls', '.csv', '.tsv', '.txt']
+export const ACCEPT_ATTR = ACCEPT_EXT.join(',')
+/**
+ * 화면에 세울 이름. **받는 것 전부가 아니라 대표만** 적는다.
+ *
+ * xlsm과 tsv는 xlsx·csv와 사실상 같은 것이라 줄을 늘리기만 하고 알려 주는 바가 없다.
+ * 뒤에 말줄임을 두어 더 있다는 것만 알린다 — 실제로 받는 목록은 위 ACCEPT_EXT이고
+ * input의 accept와 검사도 그것을 쓴다. 여기서 줄인 것은 표기뿐이다.
+ */
+export const ACCEPT_NAMES = ['xlsx', 'xls', 'csv', 'txt', '…']
+/** 한 줄로 적을 때. 오류 문구는 받는 것 전부를 적어야 한다 */
+export const ACCEPT_LABEL = ACCEPT_EXT.map((e) => e.slice(1)).join(' · ')
+
 export function isSupported(file) {
   const name = file?.name ?? ''
   return SHEET_EXT.test(name) || TEXT_EXT.test(name)

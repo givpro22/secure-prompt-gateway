@@ -39,3 +39,14 @@ export async function decideUnmask(requestId, approve, note) {
   const { data } = await client.post(`/unmask-requests/${requestId}/decision`, body)
   return data
 }
+
+/**
+ * GET /unmask-requests/mine — 내가 올린 요청 전부.
+ *
+ * 메시지 하나씩 묻는 {@link fetchMyUnmaskRequest} 와 달리 화면이 messageId를 기억하고
+ * 있지 않아도 된다. 새로고침했거나 다른 자리에서 올린 요청도 여기 잡힌다.
+ */
+export async function fetchMyUnmaskRequests() {
+  const { data } = await client.get('/unmask-requests/mine')
+  return data
+}

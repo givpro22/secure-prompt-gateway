@@ -6,7 +6,14 @@
  * 그 원문은 서버 응답이 아니라 클라이언트가 들고 있던 입력값이기 때문이다 (화면 명세 2.4-5).
  */
 import { computed, ref } from 'vue'
-import { extractFromFile, headerLine, isSupported } from '../lib/spreadsheet'
+import {
+  ACCEPT_ATTR,
+  ACCEPT_LABEL,
+  ACCEPT_NAMES,
+  extractFromFile,
+  headerLine,
+  isSupported,
+} from '../lib/spreadsheet'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -68,7 +75,7 @@ async function handleFile(file) {
 
   if (!isSupported(file)) {
     // 방어가 아니라 안내다. 파일은 어차피 이 브라우저에서만 열린다.
-    fileError.value = '표 파일만 읽을 수 있습니다 (xlsx, xls, csv, tsv).'
+    fileError.value = `표 파일만 읽을 수 있습니다 (${ACCEPT_LABEL}).`
     return
   }
 
@@ -120,24 +127,15 @@ function onKeydown(event) {
       ref="picker"
       type="file"
       class="picker"
-      accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt"
+      :accept="ACCEPT_ATTR"
       @change="onFile"
     />
 
-    <!-- ＋는 입력창 안에 있다. 상용 챗이 다 그 자리라 처음 보는 사람도 거기를 누른다 -->
+    <!--
+      ＋는 입력창 안, 글 아래 줄에 둔다. 상용 챗이 다 그 구조다.
+      옆에 두고 왼쪽 여백을 비우면 글이 그만큼 들여쓰기 돼서 가운데 정렬처럼 보인다.
+    -->
     <div class="field">
-      <button
-        type="button"
-        class="plus"
-        :disabled="disabled || reading"
-        :aria-label="reading ? '읽는 중' : '표 파일 첨부'"
-        title="표 파일에서 텍스트만 뽑아 입력창에 넣습니다. 파일 자체는 전송되지 않습니다."
-        @click="pick"
-      >
-        <span v-if="reading" class="spin" aria-hidden="true" />
-        <span v-else aria-hidden="true">＋</span>
-      </button>
-
       <textarea
         rows="3"
         :value="modelValue"
@@ -146,6 +144,35 @@ function onKeydown(event) {
         @input="emit('update:modelValue', $event.target.value)"
         @keydown="onKeydown"
       />
+
+      <div class="tools">
+        <button
+          type="button"
+          class="plus"
+          :disabled="disabled || reading"
+          :aria-label="reading ? '읽는 중' : '표 파일 첨부'"
+          title="표 파일에서 텍스트만 뽑아 입력창에 넣습니다. 파일 자체는 전송되지 않습니다."
+          @click="pick"
+        >
+          <span v-if="reading" class="spin" aria-hidden="true" />
+          <span v-else aria-hidden="true">＋</span>
+        </button>
+        <!--
+          받는 형식은 ＋에 손이 갔을 때만 편다. 늘 펴 두면 입력창 아래가 늘 시끄럽고,
+          정작 필요한 순간은 첨부를 누르려는 그 순간뿐이다.
+
+          읽는 중에는 상태가 우선이다 — 그때는 형식 목록이 알려 줄 것이 없다.
+        -->
+        <span v-if="reading" class="formats reading">읽는 중…</span>
+        <span v-else class="formats" aria-hidden="true">
+          <span
+            v-for="(name, i) in ACCEPT_NAMES"
+            :key="name"
+            class="fmt"
+            :style="{ transitionDelay: `${i * 30}ms` }"
+          >{{ name }}</span>
+        </span>
+      </div>
 
       <div v-if="dropping" class="drop-veil">
         여기에 놓으면 표에서 텍스트만 뽑습니다 · 파일은 전송되지 않습니다
@@ -182,19 +209,16 @@ function onKeydown(event) {
  * 안의 도구처럼 보이게 한다. 테두리를 주면 상자 안에 상자가 하나 더 생긴다.
  */
 .plus {
-  position: absolute;
-  left: 7px;
-  bottom: 7px;
-  z-index: 1;
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--gray);
-  font-size: 19px;
+  font-size: 17px;
   line-height: 1;
   cursor: pointer;
 }
@@ -247,22 +271,110 @@ function onKeydown(event) {
   font-size: 12.5px;
 }
 
-/* ＋가 입력창 안에 앉으므로 테두리는 이 상자가 갖는다 */
+/* 테두리는 상자가 갖는다. 안에 글과 도구 줄이 함께 산다 */
 .field {
   position: relative;
   flex: 1;
   display: flex;
-}
-
-textarea {
-  flex: 1;
-  /* 왼쪽은 ＋ 자리만큼 비운다. 글자가 버튼 위로 흐르지 않게 */
-  padding: 10px 12px 10px 46px;
+  flex-direction: column;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  resize: vertical;
-  line-height: 1.6;
   background: #fff;
+}
+
+/*
+ * 테두리도 배경도 갖지 않는다. 상자는 .field 하나뿐이어야 한다 — 여기에 테두리를
+ * 주면 상자 안에 상자가 생겨 칸이 나뉘어 보인다.
+ *
+ * resize도 끈다. 오른쪽 아래 손잡이가 그 자체로 "여기까지가 다른 상자"라고 말하고,
+ * 끌어서 늘리면 바깥 상자와 크기가 어긋난다.
+ */
+textarea {
+  flex: 1;
+  padding: 10px 12px 6px;
+  border: 0;
+  resize: none;
+  line-height: 1.6;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+textarea:focus {
+  outline: none;
+}
+
+.field:focus-within {
+  border-color: var(--blue);
+}
+
+/* 글 아래 도구 줄. ＋와 받는 형식이 여기 산다 */
+/*
+ * 도구 줄. hover 영역을 이 줄 전체가 아니라 왼쪽 덩어리로 좁히려고 inline-flex로 둔다 —
+ * 줄 전체면 입력창 아래를 스치기만 해도 형식이 펴져서 시끄럽다.
+ */
+.tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 0 8px 6px;
+}
+
+.formats {
+  display: flex;
+  gap: 4px;
+  color: var(--gray);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  /* 마우스를 여기 올려도 목록이 접히지 않게 — 그래도 클릭은 ＋가 받는다 */
+  pointer-events: none;
+}
+
+.formats.reading {
+  padding-left: 2px;
+  font-size: 11.5px;
+}
+
+/*
+ * 형식 하나가 알약 하나. 평소에는 접혀 있다가 ＋ 쪽에 손이 오면 왼쪽에서 차례로
+ * 밀려 나온다. 자리를 미리 차지하지 않도록 폭까지 함께 접는다 — opacity만 낮추면
+ * 보이지 않는 빈칸이 입력창 아래를 늘 차지한다.
+ */
+.fmt {
+  max-width: 0;
+  padding: 2px 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--card);
+  opacity: 0;
+  transform: translateX(-6px);
+  white-space: nowrap;
+  transition:
+    max-width 0.22s ease,
+    padding 0.22s ease,
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.tools:hover .fmt,
+.plus:focus-visible ~ .formats .fmt {
+  max-width: 60px;
+  padding: 2px 6px;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 나갈 때는 한꺼번에 접는다. 들어올 때의 차례를 거꾸로 돌리면 굼떠 보인다 */
+.tools:not(:hover) .fmt {
+  transition-delay: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fmt {
+    transition-duration: 0.01ms;
+    transform: none;
+  }
 }
 
 textarea:focus {

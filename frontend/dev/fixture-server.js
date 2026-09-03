@@ -1018,6 +1018,21 @@ export function fixtureServer() {
               return send(res, 200, state.unmaskRow(found, false))
             }
 
+            /*
+             * 내가 올린 요청 전부. 확정 결과를 요청자에게 돌려주는 길이다 —
+             * 화면이 messageId를 기억하고 있지 않아도 된다. 원문은 싣지 않는다.
+             */
+            if (req.method === 'GET' && path === '/unmask-requests/mine') {
+              if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
+              const user = USERS.find((u) => u.userId === userId)
+              if (!user) return fail(res, 400, 'INVALID_USER', `user ${userId} not found`)
+              const items = [...state.unmaskRequests.values()]
+                .filter((r) => r.requester?.userId === userId)
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map((r) => state.unmaskRow(r, false))
+              return send(res, 200, { items, total: items.length })
+            }
+
             if (req.method === 'GET' && path === '/unmask-requests') {
               if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
               const user = USERS.find((u) => u.userId === userId)
