@@ -4,6 +4,7 @@ import { fetchAnswerAvailable, requestAnswer, submitResponse } from '../api/mess
 import { requestUnmask } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
+import { useThreadStore } from '../stores/thread'
 import LlmPicker from './LlmPicker.vue'
 import MaskedText from './MaskedText.vue'
 import StatusBadge from './StatusBadge.vue'
@@ -208,6 +209,7 @@ async function sendToSelected() {
 const isAllow = computed(() => props.verdict.decision === 'ALLOW')
 const isBlock = computed(() => props.verdict.decision === 'BLOCK')
 const session = useSessionStore()
+const thread = useThreadStore()
 const notifications = useNotificationStore()
 
 const isMask = computed(() => props.verdict.decision === 'MASK')
@@ -295,7 +297,14 @@ const answerDecision = computed(() => {
 })
 
 /** 통과한 답변은 접어 둔다. 한 줄이면 충분하고, 내용은 세부사항으로 편다 */
-const showAnswerDetail = ref(false)
+/*
+ * 답변 본문은 펴 둔다.
+ *
+ * 처음에는 통과한 답변을 접어 두고 "세부사항"으로 폈다. 감사 콘솔이라면 맞는 판단이지만
+ * 여기는 직원 자기 채팅이고, 답변이 곧 물어본 것에 대한 대답이다. 접어 두면 담당자가
+ * 허용해도 정작 답을 어디서 보는지 알 수 없다.
+ */
+const showAnswerBody = ref(true)
 const answerPassed = computed(() => answerDecision.value === 'ALLOW')
 
 /*
@@ -410,6 +419,8 @@ async function submitAsk() {
       key: `unmask:${props.verdict.messageId}`,
       kind: 'unmask',
       messageId: props.verdict.messageId,
+      // 알림에서 이 대화로 돌아올 좌표. 대화가 캐시에 없을 때 쓰는 대비책이다.
+      sessionId: thread.activeId,
       title: label,
     })
   } catch (err) {
@@ -553,12 +564,12 @@ const summary = computed(() => {
         v-if="answerPassed && answerVerdict.inspectedText"
         type="button"
         class="answer-detail-toggle"
-        @click="showAnswerDetail = !showAnswerDetail"
+        @click="showAnswerBody = !showAnswerBody"
       >
-        {{ showAnswerDetail ? '세부사항 접기' : '세부사항' }}
+        {{ showAnswerBody ? '답변 접기' : '답변 펼치기' }}
       </button>
       <p
-        v-if="answerVerdict.inspectedText && (!answerPassed || showAnswerDetail)"
+        v-if="answerVerdict.inspectedText && (!answerPassed || showAnswerBody)"
         class="answer-body"
       >
         <MaskedText :text="answerVerdict.inspectedText" />

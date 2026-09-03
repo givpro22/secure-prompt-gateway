@@ -12,7 +12,8 @@
  * 그래서 양쪽이 각자 자기 것을 묻는다. 담당자는 목록을, 요청자는 자기 건 하나를.
  * 목록 API가 담당자 전용이라(D25) 요청자가 결과를 알 길이 그것뿐이기도 하다.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchInspection, fetchInspections } from '../api/inspections'
 import { fetchMyUnmaskRequest, fetchUnmaskRequests } from '../api/unmask'
 import { findByInspection, findByMessage, sessionDecision } from '../stores/conversationCache'
@@ -23,6 +24,8 @@ import { useThreadStore } from '../stores/thread'
 const session = useSessionStore()
 const notifications = useNotificationStore()
 const thread = useThreadStore()
+const router = useRouter()
+const route = useRoute()
 
 const open = ref(false)
 const panel = ref(null)
@@ -156,8 +159,9 @@ async function settleReview(userId, w) {
     kind: o.kind,
     title: `${w.title} — ${o.verb}`,
     body: '보안 담당자가 확정했습니다.',
-    link: '/',
     linkLabel: '대화에서 보기',
+    goSession: found?.sessionId ?? w.sessionId ?? null,
+    goTurn: found?.entry?.key ?? null,
   })
 
   // 대화에도 같은 결과를 적는다. 화면에 떠 있지 않은 세션이어도 캐시에서 찾아 고친다.
@@ -189,6 +193,10 @@ async function settleUnmask(userId, w) {
   if (row.status === 'PENDING') return
 
   const o = UNMASK_OUTCOME[row.status]
+  // 판정 카드가 확정 결과를 그린다. 요청만 하고 결과를 모르는 화면이 남지 않게.
+  const found = findByMessage(w.messageId)
+  if (found) found.entry.unmask = row
+
   notifications.pushOnce(userId, `outcome:${row.requestId}`, {
     tone: o.tone,
     kind: o.kind,
@@ -196,16 +204,30 @@ async function settleUnmask(userId, w) {
     body: row.decisionNote
       ? `${row.decidedBy}: ${row.decisionNote}`
       : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
-    link: '/',
     linkLabel: '대화에서 보기',
+    goSession: found?.sessionId ?? w.sessionId ?? null,
+    goTurn: found?.entry?.key ?? null,
   })
-
-  // 판정 카드가 확정 결과를 그린다. 요청만 하고 결과를 모르는 화면이 남지 않게.
-  const found = findByMessage(w.messageId)
-  if (found) found.entry.unmask = row
 
   notifications.settle(userId, [])
   notifications.unwatch(userId, w.key)
+}
+
+/*
+ * 알림에서 그 대화로. 세션을 열고 발화까지 굴린다.
+ *
+ * 세션 전환은 화면을 다시 그리므로 곧바로 스크롤하면 그릴 자리가 아직 없다. 한 틱
+ * 기다렸다 찾고, 못 찾으면 그냥 둔다 — 세션이 열린 것만으로도 충분하다.
+ */
+async function goToTurn(n) {
+  open.value = false
+  if (route.path !== '/chat') await router.push('/chat')
+  if (n.goSession) thread.activate(n.goSession)
+  if (n.goTurn == null) return
+  await nextTick()
+  setTimeout(() => {
+    document.getElementById(`turn-${n.goTurn}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 120)
 }
 
 async function poll() {
@@ -310,7 +332,15 @@ onUnmounted(() => {
           </span>
           <span class="row-title">{{ n.title }}</span>
           <span v-if="n.body" class="row-body">{{ n.body }}</span>
-          <RouterLink v-if="n.link" :to="n.link" class="row-link" @click="open = false">
+          <!--
+            같은 화면으로 가는 RouterLink는 눌러도 아무 일이 없다. 확정 알림은 이미
+            /chat에 있는 사람이 누르는 것이라 링크가 죽은 것처럼 보였다. 대화까지
+            데려다 놓는다 — 그 세션을 열고 해당 발화로 굴린다.
+          -->
+          <button v-if="n.goSession" type="button" class="row-link" @click="goToTurn(n)">
+            {{ n.linkLabel ?? '대화에서 보기' }}
+          </button>
+          <RouterLink v-else-if="n.link" :to="n.link" class="row-link" @click="open = false">
             {{ n.linkLabel ?? '감사 콘솔에서 보기' }}
           </RouterLink>
         </li>
@@ -498,10 +528,19 @@ onUnmounted(() => {
   line-height: 1.65;
   word-break: break-word;
 }
+/* 버튼과 링크가 한 자리를 쓴다. 버튼 기본 꼴을 벗겨 링크처럼 보이게 한다 */
 .row-link {
+  display: block;
   margin-top: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--navy);
+  font: inherit;
   font-size: 12.5px;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .pop-foot {
