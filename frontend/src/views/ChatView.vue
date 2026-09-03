@@ -4,7 +4,11 @@ import AiCandidateList from '../components/AiCandidateList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
 import MessageInput from '../components/MessageInput.vue'
 import PendingIndicator from '../components/PendingIndicator.vue'
+import ModelChip from '../components/ModelChip.vue'
 import PolicyCaption from '../components/PolicyCaption.vue'
+import PolicyRail from '../components/PolicyRail.vue'
+import ScenarioCards from '../components/ScenarioCards.vue'
+import SessionTally from '../components/SessionTally.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import VerdictCard from '../components/VerdictCard.vue'
 import { fetchInspection } from '../api/inspections'
@@ -158,14 +162,18 @@ function isHumanDecided(entry) {
 </script>
 
 <template>
+  <div class="layout">
   <div class="chat">
     <p v-if="banner" class="banner">{{ banner }}</p>
 
+    <SessionTally :entries="entries" />
+
     <section class="thread">
-      <!-- S1 초기 -->
-      <p v-if="entries.length === 0" class="empty caption">
-        프롬프트를 입력해 전송하면 사내 정책에 따라 검사한 결과를 보여 줍니다.
-      </p>
+      <!-- S1 초기 — 빈 화면 대신 데모 케이스를 버튼으로 놓는다 -->
+      <div v-if="entries.length === 0" class="empty">
+        <p class="lead">프롬프트를 입력해 전송하면 사내 정책에 따라 검사한 결과를 보여 줍니다.</p>
+        <ScenarioCards @pick="draft = $event" />
+      </div>
 
       <article v-for="entry in entries" :key="entry.key" class="turn">
         <!--
@@ -243,20 +251,55 @@ function isHumanDecided(entry) {
 
     <footer class="composer">
       <MessageInput v-model="draft" :disabled="sending" @submit="send" />
-      <PolicyCaption />
+      <div class="composer-meta">
+        <ModelChip />
+        <PolicyCaption />
+      </div>
     </footer>
+  </div>
+  <PolicyRail />
   </div>
 </template>
 
 <style scoped>
+.layout {
+  display: flex;
+  align-items: stretch;
+  min-height: calc(100vh - var(--header-h));
+}
+
 .chat {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   max-width: 880px;
   margin: 0 auto;
   padding: 20px 16px 24px;
-  min-height: calc(100vh - var(--header-h));
+}
+
+.empty .lead {
+  margin: 0;
+  padding: 26px 0 0;
+  text-align: center;
+  font-size: var(--font-caption);
+  color: var(--gray);
+}
+
+.composer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+@media (max-width: 1180px) {
+  .layout > :last-child {
+    display: none;
+  }
 }
 
 .banner {
