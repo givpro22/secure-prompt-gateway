@@ -3,9 +3,14 @@ package com.skala.gateway.api;
 import com.skala.gateway.api.dto.ErrorResponse;
 import com.skala.gateway.api.dto.MessageRequest;
 import com.skala.gateway.api.dto.MessageVerdictResponse;
+import com.skala.gateway.api.dto.ResponseInspectionRequest;
+import com.skala.gateway.api.dto.ResponseVerdictResponse;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.skala.gateway.config.CurrentUserId;
 import com.skala.gateway.domain.repository.AppUserRepository;
+import com.skala.gateway.service.AnswerService;
 import com.skala.gateway.service.InspectionService;
+import org.springframework.web.bind.annotation.GetMapping;
 import java.net.URI;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -32,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MessageController {
 
     private final InspectionService inspectionService;
+    private final AnswerService answerService;
     private final AppUserRepository appUserRepository;
 
     /**
@@ -44,9 +50,11 @@ public class MessageController {
      */
     private final int maxInputChars;
 
-    public MessageController(InspectionService inspectionService, AppUserRepository appUserRepository,
+    public MessageController(InspectionService inspectionService, AnswerService answerService,
+                             AppUserRepository appUserRepository,
                              @Value("${gateway.limits.max-input-chars}") int maxInputChars) {
         this.inspectionService = inspectionService;
+        this.answerService = answerService;
         this.appUserRepository = appUserRepository;
         this.maxInputChars = maxInputChars;
     }
@@ -80,6 +88,61 @@ public class MessageController {
                     .location(URI.create("/api/v1/inspections/" + verdict.inspectionId()))
                     .body(verdict);
             case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
+        };
+    }
+    /**
+     * {@code POST /api/v1/messages/{id}/answer} — 마스킹본을 Claude에 보내 답변을 받고
+     * 곧바로 출력 검사에 넘긴다 (UC-08 한 바퀴).
+     *
+     * <p>응답은 출력 검사 판정 그대로다. 사람이 붙여넣은 것과 같은 모양이라 화면이
+     * 두 경로를 구분하지 않는다. 키가 없으면 503 {@code ANSWER_UNAVAILABLE}이고 화면은
+     * 붙여넣기로 물러난다.
+     */
+    @PostMapping("/messages/{id}/answer")
+    public ResponseEntity<ResponseVerdictResponse> answer(@PathVariable("id") Long messageId,
+                                                          @CurrentUserId Long userId) {
+        ResponseVerdictResponse verdict = answerService.answer(messageId, userId);
+        return switch (verdict.decision()) {
+            case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
+            case PENDING -> ResponseEntity.accepted().body(verdict);
+            default -> ResponseEntity.ok(verdict);
+        };
+    }
+
+    /** {@code GET /api/v1/messages/answer/available} — 화면이 버튼을 그릴지 정하는 데 쓴다 */
+    @GetMapping("/messages/answer/available")
+    public java.util.Map<String, Object> answerAvailable() {
+        // Map.of는 null을 거부한다. 제공자 이름이 비어 있어도 응답은 나가야 한다.
+        String provider = answerService.enabled() ? answerService.providerName() : null;
+        return java.util.Map.of(
+                "available", answerService.enabled(),
+                "provider", provider == null ? "" : provider);
+    }
+
+    /**
+     * {@code POST /api/v1/messages/{id}/response} — 출력 검사 (UC-08).
+     *
+     * <p>모델이 돌려준 답변을 같은 정책으로 다시 본다. 입력과 같은 파이프라인이라
+     * 상태 코드도 같다 — 200 ALLOW·MASK / 202 REVIEW / 403 BLOCK.
+     */
+    @PostMapping("/messages/{id}/response")
+    public ResponseEntity<ResponseVerdictResponse> inspectResponse(
+            @PathVariable("id") Long messageId,
+            @CurrentUserId Long userId,
+            @RequestBody(required = false) ResponseInspectionRequest request) {
+        String text = request == null || request.text() == null ? "" : request.text();
+        if (text.trim().isEmpty()) {
+            throw ApiException.invalidRequest("검사할 답변이 비어 있습니다.");
+        }
+        if (text.length() > maxInputChars) {
+            throw ApiException.invalidRequest(
+                    "답변이 최대 길이를 초과했습니다. (" + text.length() + "자 / 최대 " + maxInputChars + "자)");
+        }
+        ResponseVerdictResponse verdict = inspectionService.inspectResponse(messageId, userId, text);
+        return switch (verdict.decision()) {
+            case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
+            case PENDING -> ResponseEntity.accepted().body(verdict);
+            default -> ResponseEntity.ok(verdict);
         };
     }
 }

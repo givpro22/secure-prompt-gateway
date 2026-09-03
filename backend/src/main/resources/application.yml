@@ -46,6 +46,28 @@ ai:
     delay-ms: ${AI_MOCK_DELAY_MS:2500}
     fail-keyword: ${AI_MOCK_FAIL_KEYWORD:__FAIL__}
 
+# --- 답변 받기 (UC-08 앞단) — 마스킹본을 Claude에 보내고 답변을 받아 출력 검사에 넘긴다 ---
+# 키가 비어 있으면 이 기능은 꺼진다. 화면은 503을 보고 붙여넣기 방식으로 물러난다.
+# 나가는 것은 message.submitted_text(마스킹본)뿐이다. 원문은 어떤 경로로도 실리지 않는다.
+answer:
+  # claude | openai | ollama. 코드는 이 값만 보고 구현을 고른다.
+  #   claude → ANTHROPIC_API_KEY
+  #   openai → ANSWER_ENDPOINT(예: https://api.openai.com/v1, https://api.groq.com/openai/v1) + ANSWER_API_KEY
+  #   ollama → ANSWER_ENDPOINT(예: http://localhost:11434), 키 없음, 외부로 안 나감
+  provider: ${ANSWER_PROVIDER:claude}
+  endpoint: ${ANSWER_ENDPOINT:}
+  api-key: ${ANSWER_API_KEY:${ANTHROPIC_API_KEY:}}
+  # openai 제공자는 쉼표로 여러 개를 줄 수 있다. 앞이 과부하·할당량이면 다음으로 넘어간다.
+  #   예) ANSWER_MODEL=gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash
+  model: ${ANSWER_MODEL:claude-opus-5}
+  # Gemini 3.x 같은 생각(thinking) 모델은 OpenAI 호환 경로에서 생각 토큰까지 이 상한에
+  # 넣는다. 200으로 시험했더니 답이 한 어절에서 끊겼다. 4096이면 넉넉하고, 실제로 짧게
+  # 답하는 모델은 어차피 여기까지 안 쓴다.
+  max-tokens: ${ANSWER_MAX_TOKENS:4096}
+  # low | medium | high. 채팅 답변은 medium이면 충분하고 low보다 어색한 답이 적다
+  effort: ${ANSWER_EFFORT:medium}
+  timeout-ms: ${ANSWER_TIMEOUT_MS:60000}
+
 gateway:
   # 입력 규모 상한. 파일 첨부는 프론트에서 텍스트로 추출해 이 경로로 들어오므로(결정 1),
   # 상한 하나가 손 타이핑과 파일 유입을 모두 덮는다.

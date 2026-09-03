@@ -4,6 +4,9 @@ import com.skala.gateway.ai.AiInspectionRequest;
 import com.skala.gateway.ai.AiInspectionRunner;
 import com.skala.gateway.api.dto.InspectionDetailResponse;
 import com.skala.gateway.api.dto.InspectionSummaryDto;
+import com.skala.gateway.api.ApiException;
+import com.skala.gateway.api.dto.ResponseVerdictResponse;
+import com.skala.gateway.domain.enums.InspectionPhase;
 import com.skala.gateway.api.dto.MessageVerdictResponse;
 import com.skala.gateway.api.dto.PageEnvelope;
 import com.skala.gateway.domain.AppUser;
@@ -126,6 +129,73 @@ public class InspectionService {
         }
 
         return MessageVerdictResponse.of(message, inspection, pending ? pollAfterMs : null);
+    }
+
+    /**
+     * 출력 검사 — 모델이 돌려준 답변을 같은 정책으로 다시 본다 (UC-08, 17장 3단계).
+     *
+     * <p>지금까지 게이트웨이는 나가는 것만 봤다. 그런데 답변에도 같은 위험이 있다 —
+     * 모델이 이름이나 번호를 지어내기도 하고, 사내 문서 조각을 물고 나오기도 한다.
+     *
+     * <p><b>입력과 같은 파이프라인을 그대로 탄다.</b> 정책 로드, 규칙 매칭, 중첩 억제,
+     * 충돌 해결, 마스킹, AI 인계까지 한 줄도 다르지 않다. 다른 것은 {@code phase}와
+     * 텍스트를 어느 칸에 넣느냐뿐이다. 스키마가 처음부터 이 자리를 비워 뒀기 때문이며
+     * (`inspection.phase`에 UNIQUE 없는 message_id), 그래서 검사가 한 메시지에 둘 붙는다.
+     *
+     * <p>정책은 <b>작성자의 부서</b> 것을 쓴다. 답변을 보는 사람이 그 사람이므로,
+     * 홍보팀 엠바고에 걸리는 제품명이 개발팀 화면에 뜨는지도 같은 기준으로 갈린다.
+     */
+    @Transactional
+    public ResponseVerdictResponse inspectResponse(Long messageId, Long userId, String text) {
+        AppUser user = appUserRepository.findById(userId)
+                .orElseThrow(() -> ApiException.invalidUser(userId));
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> ApiException.messageNotFound(messageId));
+
+        // 답변은 보낸 사람에게 돌아간 것이다. 남의 대화에 답변을 끼워 넣을 수 없다.
+        if (!message.getUser().getUserId().equals(userId)) {
+            throw ApiException.notAuthor(messageId);
+        }
+        // 나가지 않은 프롬프트에는 검사할 답변이 없다 (BLOCK이면 submittedText가 null이다).
+        if (message.getSubmittedText() == null) {
+            throw ApiException.notSent(messageId);
+        }
+        if (message.getResponseText() != null) {
+            throw ApiException.responseAlreadyInspected(messageId);
+        }
+
+        PolicyService.PolicyContext context = policyService.loadForDecision(user.getDepartment().getDeptId());
+        EngineVerdict verdict = ruleEngine.evaluate(text, context.rules());
+        FinalDecision decision = verdict.decision();
+        boolean pending = decision == FinalDecision.PENDING;
+
+        message.recordResponse(text, decision == FinalDecision.BLOCK ? null : verdict.maskedText());
+
+        Inspection inspection = new Inspection(
+                message,
+                InspectionPhase.OUTPUT,
+                context.snapshot(),
+                verdict.ruleResult(),
+                pending ? AiStatus.PENDING : AiStatus.SKIPPED,
+                decision,
+                pending ? null : DecidedBy.RULE);
+        if (!pending) {
+            inspection.setCompletedAt(OffsetDateTime.now());
+        }
+        inspectionRepository.save(inspection);
+
+        for (RuleHit hit : verdict.findings()) {
+            findingRepository.save(InspectionFinding.ofRule(
+                    inspection, hit.rule(), hit.category(), hit.spanStart(), hit.spanEnd()));
+        }
+
+        if (pending) {
+            scheduleAiInspection(inspection, user, verdict, context);
+        }
+
+        log.info("출력 검사 messageId={} decision={} 규칙={}건",
+                messageId, decision, verdict.findings().size());
+        return ResponseVerdictResponse.of(message, inspection, pending ? pollAfterMs : null);
     }
 
     /**

@@ -27,6 +27,13 @@ services:
       DB_URL: jdbc:postgresql://db:5432/gateway
       DB_USER: gateway
       DB_PASSWORD: ${DB_PASSWORD}
+      # 답변 받기(UC-08). 서버 .env에 ANTHROPIC_API_KEY를 넣으면 켜지고, 비우면 꺼진다.
+      # 코드 변경 없이 환경변수로 켜고 끈다 — Security & Config Isolation.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANSWER_PROVIDER: ${ANSWER_PROVIDER:-claude}
+      ANSWER_ENDPOINT: ${ANSWER_ENDPOINT:-}
+      ANSWER_MODEL: ${ANSWER_MODEL:-claude-opus-5}
+      ANSWER_API_KEY: ${ANSWER_API_KEY:-}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-mock}
       # nginx가 같은 오리진에서 프록시하므로 실제로는 CORS를 타지 않지만,
       # 백엔드를 직접 호출하는 Postman·로컬 개발을 위해 값은 남겨 둔다

@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { fetchAnswerAvailable, requestAnswer, submitResponse } from '../api/messages'
 import { requestUnmask } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
@@ -94,8 +95,12 @@ const changedText = computed(() => {
 const EXTERNAL_LLMS = [
   { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', prefill: 'q' },
   { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', prefill: 'q' },
+  // Gemini는 URL 프리필이 없다. 로그인 상태에서 ?q= 와 ?text= 를 직접 열어 봤고 둘 다
+  // 무시된다(2026-09-03). 클립보드로만 넘긴다. Gemini로 보내는 진짜 경로는 위의
+  // "답변 받기"다 — 게이트웨이가 API로 직접 부르고 답변이 출력 검사를 거쳐 돌아온다.
   { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app' },
-  { id: 'grok', name: 'Grok', url: 'https://grok.com/' },
+  // Grok은 ?q= 를 받으면 입력이 아니라 곧바로 전송까지 한다 (같은 날 확인).
+  { id: 'grok', name: 'Grok', url: 'https://grok.com/', prefill: 'q' },
 ]
 
 const copied = ref(false)
@@ -146,6 +151,101 @@ const isMask = computed(() => props.verdict.decision === 'MASK')
  * 화면이 더 위험하다. 얻는 것은 "이 건은 가릴 필요가 없었다"는 판단이고, 그것을 근거로
  * 다시 보내는 것은 사람이 한다.
  */
+/*
+ * 출력 검사 (UC-08).
+ *
+ * 게이트웨이는 지금까지 나가는 것만 봤다. 답변에도 같은 위험이 있다 — 모델이 이름이나
+ * 번호를 지어내기도 하고 사내 문서 조각을 물고 나오기도 한다.
+ *
+ * 답변을 여기로 가져오는 것은 사람이 한다. 상용 LLM 웹 UI로 보내는 구조라 응답이
+ * 게이트웨이로 돌아오지 않기 때문이다. 게이트웨이가 API로 직접 부르는 구조가 되면
+ * 이 붙여넣기는 사라지고 나머지는 그대로 쓰인다 — 검사하는 쪽은 이미 같은 파이프라인이다.
+ */
+const checking = ref(false)
+const answer = ref('')
+const answerBusy = ref(false)
+const answerVerdict = ref(null)
+const answerError = ref('')
+
+const canCheckAnswer = computed(
+  () => approvedText.value != null && props.verdict.messageId != null && answerVerdict.value === null,
+)
+
+const ANSWER_TONE = {
+  ALLOW: '답변에서 걸린 규칙이 없습니다.',
+  MASK: '답변에서 탐지된 항목을 라벨로 치환했습니다.',
+  BLOCK: '이 답변은 그대로 두기 어렵습니다. 아래 규칙에 걸렸습니다.',
+  PENDING: '보안 담당자 확인이 필요합니다.',
+}
+
+async function checkAnswer() {
+  const text = answer.value.trim()
+  if (text.length === 0 || answerBusy.value) return
+  answerBusy.value = true
+  answerError.value = ''
+  try {
+    const res = await submitResponse(props.verdict.messageId, text)
+    answerVerdict.value = res.data
+    checking.value = false
+    notifications.push(session.currentUserId, {
+      tone: res.data.decision === 'ALLOW' ? 'allow' : res.data.decision.toLowerCase(),
+      kind: '답변 검사',
+      title: ANSWER_TONE[res.data.decision] ?? '답변을 검사했습니다',
+      body: (res.data.ruleResult?.matches ?? []).map((m) => m.code).join(', ') || '걸린 규칙 없음',
+    })
+  } catch (err) {
+    answerError.value =
+      err?.response?.data?.message ?? '답변을 검사하지 못했습니다. 잠시 후 다시 시도하세요.'
+  } finally {
+    answerBusy.value = false
+  }
+}
+
+const answerMatches = computed(() => answerVerdict.value?.ruleResult?.matches ?? [])
+
+/*
+ * 답변 받기 — 게이트웨이가 모델을 직접 불러 답변을 받고 곧바로 출력 검사에 넘긴다.
+ * 붙여넣기(checkAnswer)와 결과 모양이 같아서 아래 렌더링을 그대로 쓴다.
+ *
+ * 서버에 제공자가 켜져 있을 때만 버튼이 뜬다. 키가 없으면 붙여넣기만 남는다.
+ */
+const autoAnswer = ref({ available: false, provider: '' })
+const fetching = ref(false)
+onMounted(async () => {
+  try {
+    autoAnswer.value = await fetchAnswerAvailable()
+  } catch {
+    autoAnswer.value = { available: false, provider: '' }
+  }
+})
+
+async function getAnswer() {
+  if (fetching.value) return
+  fetching.value = true
+  answerError.value = ''
+  try {
+    const res = await requestAnswer(props.verdict.messageId)
+    answerVerdict.value = res.data
+    checking.value = false
+    notifications.push(session.currentUserId, {
+      tone: res.data.decision === 'ALLOW' ? 'allow' : res.data.decision.toLowerCase(),
+      kind: '답변 검사',
+      title: ANSWER_TONE[res.data.decision] ?? '답변을 검사했습니다',
+      body: (res.data.ruleResult?.matches ?? []).map((m) => m.code).join(', ') || '걸린 규칙 없음',
+    })
+  } catch (err) {
+    const code = err?.response?.data?.code
+    answerError.value =
+      code === 'ANSWER_UNAVAILABLE'
+        ? '답변 받기가 꺼져 있습니다. 받은 답변을 붙여넣어 검사하세요.'
+        : (err?.response?.data?.message ?? '답변을 받지 못했습니다.')
+    if (code === 'ANSWER_UNAVAILABLE') autoAnswer.value = { available: false, provider: '' }
+    checking.value = true
+  } finally {
+    fetching.value = false
+  }
+}
+
 /** 알림 한 줄에 들어갈 만큼만 자른다 */
 function shortTitle(text) {
   const one = (text ?? '').replace(/\s+/g, ' ').trim()
@@ -287,6 +387,56 @@ const summary = computed(() => {
       </form>
     </div>
 
+    <!--
+      출력 검사 (UC-08). 받은 답변을 같은 정책으로 다시 본다.
+      가져오는 것은 사람이 한다 — 상용 LLM 웹 UI로 보내는 구조라 응답이 돌아오지 않는다.
+    -->
+    <form v-if="checking" class="answer-check" @submit.prevent="checkAnswer">
+      <label class="answer-label" for="answer-text">
+        받은 답변을 붙여넣으세요. 보낼 때와 같은 정책으로 다시 검사합니다.
+      </label>
+      <textarea
+        id="answer-text"
+        v-model="answer"
+        rows="3"
+        :disabled="answerBusy"
+        placeholder="예) 확인했습니다. 담당자 연락처는 010-1234-5678 입니다."
+      />
+      <div class="answer-actions">
+        <button type="button" class="unmask-cancel" :disabled="answerBusy" @click="checking = false">
+          취소
+        </button>
+        <button type="submit" class="unmask-send" :disabled="answerBusy || answer.trim().length === 0">
+          {{ answerBusy ? '검사 중…' : '답변 검사' }}
+        </button>
+      </div>
+      <p v-if="answerError" class="unmask-error">{{ answerError }}</p>
+    </form>
+
+    <section
+      v-if="answerVerdict"
+      class="answer-result"
+      :class="`t-${answerVerdict.decision.toLowerCase()}`"
+    >
+      <header class="answer-head">
+        <StatusBadge :value="answerVerdict.decision" />
+        <span class="answer-title">답변 재검사 · 규칙 {{ answerMatches.length }}건</span>
+      </header>
+      <p v-if="approvedText" class="answer-sent">
+        모델에 보낸 것: <code>{{ approvedText }}</code>
+      </p>
+      <p class="answer-note">{{ ANSWER_TONE[answerVerdict.decision] }}</p>
+      <ul v-if="answerMatches.length > 0" class="answer-rules">
+        <li v-for="m in answerMatches" :key="`${m.code}:${m.span?.[0]}`">
+          <code>{{ m.code }}</code>
+          <span class="answer-cat">{{ term(CATEGORY_TERMS, m.category) }}</span>
+        </li>
+      </ul>
+      <p v-if="answerVerdict.inspectedText" class="answer-body">
+        <MaskedText :text="answerVerdict.inspectedText" />
+      </p>
+    </section>
+
     <p v-else-if="requested" class="unmask-done">
       검토 요청됨 — 보안 담당자가 원문과 마스킹본을 비교해 확정합니다.
       이미 전송된 본문은 되돌아오지 않습니다.
@@ -312,6 +462,24 @@ const summary = computed(() => {
         <span v-if="copied" class="copied" role="status">— 복사했습니다</span>
       </span>
       <span class="egress-actions">
+        <button
+          v-if="canCheckAnswer && autoAnswer.available"
+          type="button"
+          class="egress-btn ghost"
+          :disabled="fetching"
+          :title="autoAnswer.provider ? `제공자: ${autoAnswer.provider}` : ''"
+          @click="getAnswer"
+        >
+          {{ fetching ? '답변 받는 중…' : '답변 받기' }}
+        </button>
+        <button
+          v-if="canCheckAnswer"
+          type="button"
+          class="egress-btn ghost"
+          @click="checking = !checking"
+        >
+          답변 붙여넣기
+        </button>
         <button
           v-if="canAskUnmask"
           type="button"
@@ -474,6 +642,110 @@ const summary = computed(() => {
   margin: 10px 0 0;
   font-size: var(--font-caption);
   color: var(--navy);
+}
+
+/* 출력 검사 (UC-08) */
+.answer-check {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.answer-label {
+  color: var(--gray);
+  font-size: 13px;
+}
+.answer-check textarea {
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--navy);
+}
+.answer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.answer-result {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.answer-result.t-block {
+  border-left-color: #c5372c;
+}
+.answer-result.t-mask {
+  border-left-color: #c08a2e;
+}
+.answer-result.t-allow {
+  border-left-color: #2f7d54;
+}
+.answer-result.t-pending {
+  border-left-color: #6b74d6;
+}
+.answer-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.answer-title {
+  color: var(--navy);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.answer-sent {
+  margin: 8px 0 0;
+  color: var(--gray);
+  font-size: 12.5px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+.answer-sent code {
+  color: var(--navy);
+}
+.answer-note {
+  margin: 8px 0 0;
+  color: var(--gray);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.answer-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.answer-rules code {
+  color: var(--navy);
+}
+.answer-cat {
+  margin-left: 6px;
+  color: var(--gray);
+}
+.answer-body {
+  margin: 10px 0 0;
+  padding: 11px 13px;
+  border-radius: 8px;
+  background: var(--bg-soft, #f6f7f9);
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--navy);
+  white-space: pre-wrap;
 }
 
 /* 마스킹 해제 검토 요청 (D25) */

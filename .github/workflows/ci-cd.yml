@@ -146,6 +146,11 @@ jobs:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 답변 받기 제공자. 비어 있으면 서버 .env를 건드리지 않는다.
+          ANSWER_PROVIDER: ${{ secrets.ANSWER_PROVIDER }}
+          ANSWER_ENDPOINT: ${{ secrets.ANSWER_ENDPOINT }}
+          ANSWER_MODEL: ${{ secrets.ANSWER_MODEL }}
+          ANSWER_API_KEY: ${{ secrets.ANSWER_API_KEY }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
@@ -159,6 +164,13 @@ jobs:
           cd ~/secure-prompt-gateway
           git fetch --quiet origin main
           git reset --hard --quiet origin/main
+          # 답변 받기(UC-08) 제공자 설정. GitHub Secrets에 있으면 .env에 써넣고, 없으면
+          # 건드리지 않는다. 키는 GitHub → 이 stdin → .env 로만 흐르고 로그·ps에 남지 않는다.
+          upsert() { [ -n "\$2" ] || return 0; { grep -v "^\$1=" .env 2>/dev/null || true; echo "\$1=\$2"; } > .env.tmp && mv .env.tmp .env; }
+          upsert ANSWER_PROVIDER '$ANSWER_PROVIDER'
+          upsert ANSWER_ENDPOINT '$ANSWER_ENDPOINT'
+          upsert ANSWER_MODEL    '$ANSWER_MODEL'
+          upsert ANSWER_API_KEY  '$ANSWER_API_KEY'
           echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin
           docker compose pull
           docker compose up -d
