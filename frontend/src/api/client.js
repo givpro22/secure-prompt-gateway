@@ -23,6 +23,18 @@ const client = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+/**
+ * 요청을 보낼 백엔드를 바꾼다 (시연용 AI 엔진 전환).
+ *
+ * `@Profile`은 기동 시점에 고정되므로 한 인스턴스 안에서 Mock↔LLM을 바꿀 수 없다.
+ * 대신 프로파일이 다른 백엔드를 두 개 띄워 두고 여기서 주소를 바꾼다. 화면·요청·응답
+ * 스키마가 전부 같다는 것이 이 전환이 성립하는 이유이며, 그것이 곧 AiInspector가
+ * 유일한 교체 지점이라는 증거다 (기획서 9.6).
+ */
+export function setApiBase(url) {
+  client.defaults.baseURL = url
+}
+
 /*
  * X-User-Id 주입원. Pinia store를 여기서 import하면
  * client → store → client 순환 참조가 되므로 main.js가 바인딩한다.
