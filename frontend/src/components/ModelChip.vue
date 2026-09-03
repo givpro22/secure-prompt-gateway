@@ -2,27 +2,48 @@
 /*
  * 전송 대상 모델 표시.
  *
- * **선택지가 하나뿐이라 드롭다운으로 만들지 않는다.** 눌러도 아무것도 바뀌지 않는
- * 컨트롤은 시연 중에 눌릴 자리이고, 없는 기능을 있는 것처럼 보이게 한다.
- * 모델이 늘면 MODELS 배열에 추가하는 것만으로 select로 바뀐다.
+ * **화면이 지어내지 않는다.** 예전에는 "Llama-3.1-70B · 사내 GPU"를 하드코딩해 두었다.
+ * 실제로 부르는 것이 없던 시절에는 "어디로 나갈 것인가"를 알리는 말이었지만, 게이트웨이가
+ * 진짜로 모델을 부르기 시작한 뒤로는 화면이 거짓말을 하는 자리가 되었다 — 답은 제미나이가
+ * 주는데 칩은 사내 GPU라고 적혀 있었다.
  *
- * 실제 호출은 지금 Mock이다 (기획서 0.4). 여기 표시는 "어디로 나가는가"를 알리는
- * 정보이지 사용자의 선택이 아니다.
+ * 이제 서버에 묻는다(`GET /messages/answer/available`). 무엇이 붙어 있는지는 환경변수가
+ * 정하고 코드는 모른다 — 그 사실을 화면도 같은 방식으로 안다.
+ *
+ * 제공자가 꺼져 있으면 "미연결"로 적는다. 아무것도 안 붙은 상태를 붙은 것처럼 보이게 하는
+ * 것이 이 서비스가 막으려는 종류의 거짓이다.
  */
-const MODELS = [{ id: 'llama-3.1-70b', name: 'Llama-3.1-70B', host: '사내 GPU' }]
+import { computed, onMounted, ref } from 'vue'
+import { fetchAnswerAvailable } from '../api/messages'
 
-const single = MODELS.length === 1 ? MODELS[0] : null
+/*
+ * 한 번만 묻는다. 칩은 대화마다 그려지는데 매번 물으면 같은 답을 수십 번 받는다.
+ * 모듈에 약속을 담아 두고 모두가 그것을 기다린다.
+ */
+let inflight = null
+function load() {
+  if (!inflight) inflight = fetchAnswerAvailable().catch(() => ({ available: false, provider: '' }))
+  return inflight
+}
+
+const state = ref({ available: false, provider: '' })
+onMounted(async () => {
+  state.value = await load()
+})
+
+const title = computed(() =>
+  state.value.available
+    ? `답변 제공자: ${state.value.provider}. 게이트웨이가 마스킹본을 보내고 받은 답을 다시 검사합니다.`
+    : '연결된 모델이 없습니다. 받은 답변을 붙여넣으면 같은 정책으로 검사합니다.',
+)
 </script>
 
 <template>
-  <span v-if="single" class="model" :title="`전송 대상: ${single.name} (${single.host})`">
+  <span class="model" :class="{ off: !state.available }" :title="title">
     <span class="dot" aria-hidden="true" />
-    <span class="name">{{ single.name }}</span>
-    <span class="host">{{ single.host }}</span>
+    <span class="name">{{ state.available ? state.provider : '모델 미연결' }}</span>
+    <span class="host">{{ state.available ? '게이트웨이 경유' : '붙여넣기로 검사' }}</span>
   </span>
-  <select v-else class="model-select">
-    <option v-for="m in MODELS" :key="m.id" :value="m.id">{{ m.name }} · {{ m.host }}</option>
-  </select>
 </template>
 
 <style scoped>
@@ -59,5 +80,14 @@ const single = MODELS.length === 1 ? MODELS[0] : null
   border-radius: 5px;
   font: inherit;
   font-size: 13px;
+}
+
+/* 붙은 것이 없을 때는 점을 죽인다. 켜진 것과 같은 색이면 상태를 못 읽는다 */
+.model.off {
+  color: var(--gray);
+}
+
+.model.off .dot {
+  background: var(--gray);
 }
 </style>

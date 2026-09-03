@@ -120,6 +120,19 @@ watch(
 )
 const sending = ref(false)
 const banner = ref('')
+/*
+ * 표를 붙였을 때의 안내 (D17).
+ *
+ * 파일이 브라우저 밖으로 나가지 않는다는 사실을 사람이 알아야 한다. 여기서 하는 형식
+ * 검사는 방어가 아니라 안내이고, 실제로 검사받는 것은 입력창에 들어간 텍스트다.
+ */
+const attached = ref('')
+
+function onAttached(meta) {
+  const where = meta.sheet ? ` 시트 "${meta.sheet}"에서` : '에서'
+  const cut = meta.truncated ? ` 앞 ${meta.kept}행만 가져왔습니다` : ` ${meta.rows}행을 가져왔습니다`
+  attached.value = `${meta.name}${where}${cut}`
+}
 const entries = ref([])
 const pollingEntryKey = ref(null)
 const refreshingKey = ref(null)
@@ -209,6 +222,7 @@ async function send() {
 
     // 보냈으니 더 이상 작성 중이 아니다.
     thread.setWriting(null)
+    attached.value = ''
     /*
      * 데모 재생도 세션 판정을 채운다. 예전에는 "직접 입력한 것만 센다"고 건너뛰었는데,
      * 데모가 목록의 세션이 된 뒤로는 그러면 판정이 null로 남는다 — 점 색이 비고,
@@ -466,7 +480,10 @@ function isHumanDecided(entry) {
     </section>
 
     <footer class="composer">
-      <MessageInput v-model="draft" :disabled="sending" @submit="send" />
+      <MessageInput v-model="draft" :disabled="sending" @submit="send" @attached="onAttached" />
+      <p v-if="attached" class="attach-note caption">
+        {{ attached }} — 파일은 전송되지 않습니다. 위 입력창의 <b>텍스트</b>가 정책 검사를 거쳐 나갑니다.
+      </p>
       <div class="composer-meta">
         <ModelChip />
         <PolicyCaption />
@@ -678,6 +695,12 @@ function isHumanDecided(entry) {
   align-items: center;
   gap: 8px;
   margin: 10px 2px 0;
+}
+
+.attach-note {
+  margin: 8px 2px 0;
+  color: var(--gray);
+  font-size: 12.5px;
 }
 
 .refresh-row {
