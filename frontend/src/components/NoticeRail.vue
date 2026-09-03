@@ -54,11 +54,14 @@ const notices = computed(() => {
 })
 
 /*
- * 정책 세트 리비전. 빌드 시점에 마이그레이션 개수를 세어 넣는다(vite.config.js).
- * 정책·규칙이 바뀔 때마다 마이그레이션이 하나 늘고 그게 커밋 하나라, 이 숫자는
- * 커밋 이력을 따라간다. 개별 정책의 version(P-PII v5)과는 다른 축이다.
+ * 정책 버전. 빌드 시점의 git 커밋에서 온다(vite.config.js).
+ * 화면에서 본 값으로 저장소의 그 시점을 바로 찾을 수 있다.
+ *
+ * 개별 정책의 version(P-PII v5)과는 다른 축이다. 저건 정책 하나의 개정 횟수이고
+ * 판정 스냅샷 대조에 쓰인다.
  */
-const revision = __POLICY_REVISION__
+const gitVersion = __GIT_VERSION__
+const versionText = gitVersion.sha ? `v${gitVersion.count} · ${gitVersion.sha}` : null
 
 const baseDate = computed(() => {
   const dates = session.policies.map((p) => p.registeredAt).filter(Boolean)
@@ -96,9 +99,9 @@ const baseDate = computed(() => {
       </ul>
 
       <footer class="base">
-        <span class="base-row">
+        <span v-if="versionText" class="base-row">
           <span class="base-key">정책 버전</span>
-          <span class="base-val">v{{ revision }}</span>
+          <span class="base-val">{{ versionText }}</span>
         </span>
         <span v-if="baseDate" class="base-row">
           <span class="base-key">기준일</span>

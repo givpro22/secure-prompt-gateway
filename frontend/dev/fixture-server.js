@@ -55,11 +55,50 @@ const CUSTOMERS = [
   { name: '최수아', givenName: '수아', company: '오름식품' },
   { name: '한연우', givenName: '연우', company: '성진기계' },
   { name: '황도윤', givenName: '도윤', company: '성진기계' },
+  // 시연용 명단. givenNameDetectable=false는 이름 단독 탐지에서 빠진다 —
+  // 성을 뗀 부분이 한 글자이거나 일반 명사와 겹치는 경우다.
+  { name: '박재현', givenName: '재현', givenNameDetectable: false, company: '시연 명단' },
+  { name: '윤재성', givenName: '재성', givenNameDetectable: true, company: '시연 명단' },
+  { name: '서지윤', givenName: '지윤', givenNameDetectable: true, company: '시연 명단' },
+  { name: '김경록', givenName: '경록', givenNameDetectable: true, company: '시연 명단' },
+  { name: '김대훈', givenName: '대훈', givenNameDetectable: true, company: '시연 명단' },
+  { name: '박진', givenName: '진', givenNameDetectable: false, company: '시연 명단' },
+  { name: '정대령', givenName: '대령', givenNameDetectable: false, company: '시연 명단' },
+  { name: '김영옥', givenName: '영옥', givenNameDetectable: true, company: '시연 명단' },
+  { name: '임유경', givenName: '유경', givenNameDetectable: true, company: '시연 명단' },
+  { name: '김희주', givenName: '희주', givenNameDetectable: true, company: '시연 명단' },
+  { name: '조종원', givenName: '종원', givenNameDetectable: true, company: '시연 명단' },
+  { name: '신민서', givenName: '민서', givenNameDetectable: true, company: '시연 명단' },
+  { name: '고윤진', givenName: '윤진', givenNameDetectable: true, company: '시연 명단' },
+  { name: '박소미', givenName: '소미', givenNameDetectable: true, company: '시연 명단' },
+  { name: '정한결', givenName: '한결', givenNameDetectable: true, company: '시연 명단' },
+  { name: '박병서', givenName: '병서', givenNameDetectable: true, company: '시연 명단' },
+  { name: '김태림', givenName: '태림', givenNameDetectable: true, company: '시연 명단' },
+  { name: '이건', givenName: '건', givenNameDetectable: false, company: '시연 명단' },
+  { name: '허진녕', givenName: '진녕', givenNameDetectable: true, company: '시연 명단' },
+  { name: '최강희', givenName: '강희', givenNameDetectable: true, company: '시연 명단' },
+  { name: '장상민', givenName: '상민', givenNameDetectable: true, company: '시연 명단' },
+  { name: '이다영', givenName: '다영', givenNameDetectable: true, company: '시연 명단' },
+  { name: '길다연', givenName: '다연', givenNameDetectable: true, company: '시연 명단' },
+  { name: '황인체', givenName: '인체', givenNameDetectable: false, company: '시연 명단' },
+  { name: '정다운', givenName: '다운', givenNameDetectable: false, company: '시연 명단' },
+  { name: '유재권', givenName: '재권', givenNameDetectable: true, company: '시연 명단' },
+  { name: '조현강', givenName: '현강', givenNameDetectable: true, company: '시연 명단' },
+  { name: '정회중', givenName: '회중', givenNameDetectable: false, company: '시연 명단' },
+  { name: '안성민', givenName: '성민', givenNameDetectable: true, company: '시연 명단' },
+  { name: '권경현', givenName: '경현', givenNameDetectable: true, company: '시연 명단' },
+  { name: '한세훈', givenName: '세훈', givenNameDetectable: true, company: '시연 명단' },
+  { name: '황가영', givenName: '가영', givenNameDetectable: true, company: '시연 명단' },
+  { name: '김제찬', givenName: '제찬', givenNameDetectable: true, company: '시연 명단' },
+  { name: '임창우', givenName: '창우', givenNameDetectable: true, company: '시연 명단' },
+  { name: '김재현', givenName: '재현', givenNameDetectable: false, company: '시연 명단' },
+  { name: '이헌준', givenName: '헌준', givenNameDetectable: true, company: '시연 명단' },
 ]
 
 /** 앞뒤 한글 경계로 '서준이가'의 서준, '우진공업'의 우진 같은 접사 결합을 거른다. */
 function rosterPattern(field) {
-  const names = [...new Set(CUSTOMERS.map((c) => c[field]))].sort()
+  const pool = field === 'givenName' ? CUSTOMERS.filter((c) => c.givenNameDetectable !== false) : CUSTOMERS
+  const names = [...new Set(pool.map((c) => c[field]).filter(Boolean))].sort()
   return new RegExp(`(?<![가-힣])(?:${names.join('|')})(?![가-힣])`, 'g')
 }
 

@@ -16,6 +16,12 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     @Query("select c.name from Customer c where c.isActive = true order by c.name")
     List<String> findActiveNames();
 
-    @Query("select distinct c.givenName from Customer c where c.isActive = true order by c.givenName")
+    @Query("""
+            select distinct c.givenName
+              from Customer c
+             where c.isActive = true
+               and c.givenNameDetectable = true
+             order by c.givenName
+            """)
     List<String> findActiveGivenNames();
 }
