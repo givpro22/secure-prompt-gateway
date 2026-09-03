@@ -95,8 +95,12 @@ const changedText = computed(() => {
 const EXTERNAL_LLMS = [
   { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', prefill: 'q' },
   { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', prefill: 'q' },
+  // Gemini는 URL 프리필이 없다. 로그인 상태에서 ?q= 와 ?text= 를 직접 열어 봤고 둘 다
+  // 무시된다(2026-09-03). 클립보드로만 넘긴다. Gemini로 보내는 진짜 경로는 위의
+  // "답변 받기"다 — 게이트웨이가 API로 직접 부르고 답변이 출력 검사를 거쳐 돌아온다.
   { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app' },
-  { id: 'grok', name: 'Grok', url: 'https://grok.com/' },
+  // Grok은 ?q= 를 받으면 입력이 아니라 곧바로 전송까지 한다 (같은 날 확인).
+  { id: 'grok', name: 'Grok', url: 'https://grok.com/', prefill: 'q' },
 ]
 
 const copied = ref(false)
