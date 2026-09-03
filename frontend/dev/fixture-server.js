@@ -471,6 +471,8 @@ export function createFixtureState() {
       ruleCount: inspection.findings.filter((f) => f.source === 'RULE').length,
       aiStatus: inspection.aiStatus,
       decidedBy: inspection.decidedBy,
+      // 감사 목록이 훑을 대상은 마스킹본이다 (5.4). BLOCK이면 null.
+      submittedText: inspection.submittedText ?? null,
     }
   }
 
