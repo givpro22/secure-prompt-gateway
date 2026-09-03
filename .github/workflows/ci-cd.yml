@@ -95,7 +95,10 @@ jobs:
           - name: frontend
             context: ./frontend
     steps:
+      # 화면의 정책 버전이 커밋 수다. 기본 얕은 클론이면 항상 1이 나온다.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: GHCR 로그인
         env:
@@ -108,7 +111,13 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${IMAGE_PREFIX}-${{ matrix.name }}"
-          docker build -t "$IMAGE:latest" -t "$IMAGE:${{ github.sha }}" "${{ matrix.context }}"
+          # 프런트는 화면에 커밋 정보를 찍는다. 빌드 컨텍스트에 .git이 없어 여기서 넘긴다.
+          BUILD_ARGS=()
+          if [ "${{ matrix.name }}" = "frontend" ]; then
+            BUILD_ARGS+=(--build-arg "GIT_COMMIT_COUNT=$(git rev-list --count HEAD)")
+            BUILD_ARGS+=(--build-arg "GIT_SHA=$(git rev-parse --short HEAD)")
+          fi
+          docker build "${BUILD_ARGS[@]}" -t "$IMAGE:latest" -t "$IMAGE:${{ github.sha }}" "${{ matrix.context }}"
           docker push "$IMAGE:latest"
           docker push "$IMAGE:${{ github.sha }}"
 
