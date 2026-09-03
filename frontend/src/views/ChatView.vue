@@ -17,6 +17,7 @@ import { errorText, expectField } from '../lib/contract'
 import { DECIDED_BY_TERMS, term } from '../lib/terms'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
+import { notificationFromVerdict, useNotificationStore } from '../stores/notifications'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -29,6 +30,7 @@ import { useThreadStore } from '../stores/thread'
  */
 
 const thread = useThreadStore()
+const notifications = useNotificationStore()
 const session = useSessionStore()
 const draft = ref('')
 
@@ -184,6 +186,7 @@ watch(
     draft.value = saved?.draft ?? ''
     banner.value = ''
     thread.useAccount(next)
+    notifications.useAccount(next)
   },
   { immediate: true },
 )
@@ -237,6 +240,10 @@ async function send() {
     // "이번 세션"은 **직접 입력해 답변을 받은 것**만 센다. 데모 대화를 열어보는 것은
     // 지난 대화를 훑는 행동이지 내가 이번에 한 일이 아니다.
     if (!replaying.value) thread.addTurn(text, verdict.decision)
+    // 판정은 알림함에도 한 줄 남는다. 데모 대화를 훑는 것은 내가 이번에 한 일이 아니다.
+    if (!replaying.value) {
+      notifications.push(session.currentUserId, notificationFromVerdict(verdict))
+    }
 
     if (verdict.decision === 'PENDING') startPolling(entry)
   } catch (err) {
