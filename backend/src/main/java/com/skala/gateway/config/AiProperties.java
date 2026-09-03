@@ -19,6 +19,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param maxTokens     기획서 9.3 제약: 800
  * @param timeoutMs     llm 호출 타임아웃
  * @param maxInputChars 프롬프트 최대 입력 길이. 초과 시 앞부분만 전달하고 missingContext에 절단 기록
+ * @param batchSize     llm 전용. 한 번의 호출에 넣는 문장 수. <b>기본 1이다.</b> 여러 문장을 묶으면
+ *                      같은 문장이 이웃 문장에 따라 다른 판정을 받는다 — 배치 11에서 골든셋이
+ *                      38~40/46 사이를 오갔고, 1로 낮추자 43/46으로 안정됐다 (_workspace/05 §2)
  * @param mock          Mock 전용 설정
  */
 @ConfigurationProperties("ai")
@@ -31,6 +34,7 @@ public record AiProperties(
         int maxTokens,
         long timeoutMs,
         int maxInputChars,
+        int batchSize,
         Mock mock) {
 
     /**
