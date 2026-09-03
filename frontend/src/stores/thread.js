@@ -100,8 +100,13 @@ export const useThreadStore = defineStore('thread', {
     resumeOwn() {
       this.resumeAt += 1
     },
-    requestDraft(text) {
-      this.pendingDraft = { text, at: Date.now() }
+    /**
+     * 작성 중 항목을 연다. **새 대화로 연다** — 지금 대화 뒤에 붙이면 보내지도 않은
+     * 문장이 앞 판정들 아래에 끼어들어 한 흐름처럼 보인다.
+     */
+    openDraft(key, text) {
+      this.setViewing('own')
+      this.pendingDraft = { key, text, at: Date.now() }
     },
     openDemo(key, prompts, answers = []) {
       this.setViewing(key)

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AiCandidateList from '../components/AiCandidateList.vue'
 import MaskedText from '../components/MaskedText.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -16,6 +16,7 @@ import {
 } from '../lib/terms'
 import { useSessionStore } from '../stores/session'
 import UnmaskQueue from '../components/UnmaskQueue.vue'
+import { useRouter } from 'vue-router'
 
 /*
  * SCR-02 관리자 감사 콘솔 (기획서 5.4).
@@ -26,6 +27,7 @@ import UnmaskQueue from '../components/UnmaskQueue.vue'
 const PAGE_SIZE = 20
 
 const session = useSessionStore()
+const router = useRouter()
 
 const filters = ref({ deptId: '', status: '', from: '', to: '' })
 const page = ref(0)
@@ -214,6 +216,22 @@ const policyVersionText = computed(() => {
  * 미리 보여줄 뿐이다. 버튼을 눌러야 막힌 걸 아는 것보다 낫다.
  */
 const canReview = computed(() => session.currentUser?.role === 'SECURITY_ADMIN')
+
+/*
+ * 권한이 없으면 여기서 내보낸다. 라우터 가드만으로는 두 곳이 뚫린다 —
+ * 계정 전환은 이동이 아니라 화면에 남은 채로 보는 사람만 바뀌는 일이고,
+ * 주소로 바로 들어오면 계정 목록을 받기 전에 가드가 먼저 돌아 판단할 근거가 없다.
+ *
+ * 그래서 판단은 계정이 **정해진 뒤에** 한다. `canReview`를 보면 false → false라
+ * 값이 안 바뀌어 깨어나지 않으므로 사용자 자체를 본다.
+ */
+watch(
+  () => session.currentUser,
+  (user) => {
+    if (user && user.role !== 'SECURITY_ADMIN') router.replace({ name: 'chat' })
+  },
+  { immediate: true },
+)
 
 const humanDecided = computed(
   () => Boolean(detail.value) && detail.value.decidedBy === 'HUMAN',

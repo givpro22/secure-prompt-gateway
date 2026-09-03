@@ -608,6 +608,27 @@ export function createFixtureState() {
     return request
   }
 
+  /*
+   * 대기 중인 해제 요청 하나를 미리 넣어 둔다.
+   *
+   * 픽스처는 메모리에만 있어서 서버를 다시 띄우면 요청이 전부 날아간다. 그러면
+   * 보안 담당자로 들어갔을 때 종도 대기열도 비어 있어, 시연에서 이 기능이 없는
+   * 것처럼 보인다. 고객 명단과 이름이 겹치는 직원을 부른 문장으로 하나 깔아 둔다.
+   */
+  {
+    const requester = USERS.find((u) => u.userId === 1)
+    const { messageId } = createInspection({
+      text: '서지윤 대리한테 스프린트 회고 정리 넘겨줘',
+      userId: requester.userId,
+      createdAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+    })
+    createUnmaskRequest(
+      messageId,
+      requester,
+      '개발팀 서지윤 대리입니다. 고객 명단과 이름만 같습니다.',
+    )
+  }
+
   return {
     inspections,
     createInspection,
