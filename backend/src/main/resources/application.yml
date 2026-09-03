@@ -60,8 +60,10 @@ answer:
   # openai 제공자는 쉼표로 여러 개를 줄 수 있다. 앞이 과부하·할당량이면 다음으로 넘어간다.
   #   예) ANSWER_MODEL=gemini-3.6-flash,gemini-3.7-flash,gemini-flash-latest
   model: ${ANSWER_MODEL:claude-opus-5}
-  # 업무 답변은 길 필요가 없다. 상한이 크면 응답 지연이 그만큼 늘어난다
-  max-tokens: ${ANSWER_MAX_TOKENS:2048}
+  # Gemini 3.x 같은 생각(thinking) 모델은 OpenAI 호환 경로에서 생각 토큰까지 이 상한에
+  # 넣는다. 200으로 시험했더니 답이 한 어절에서 끊겼다. 4096이면 넉넉하고, 실제로 짧게
+  # 답하는 모델은 어차피 여기까지 안 쓴다.
+  max-tokens: ${ANSWER_MAX_TOKENS:4096}
   # low | medium | high. 채팅 답변은 medium이면 충분하고 low보다 어색한 답이 적다
   effort: ${ANSWER_EFFORT:medium}
   timeout-ms: ${ANSWER_TIMEOUT_MS:60000}
