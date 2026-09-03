@@ -9,6 +9,7 @@
  * 만들 수 없고, 지금 화면에 있는 것만 보여준다 — 눌러도 아무것도 안 열리는 목록보다 낫다.
  */
 import { useRouter } from 'vue-router'
+import UserMenu from './UserMenu.vue'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 import { STATUS_TERMS } from '../lib/terms'
@@ -103,9 +104,6 @@ function restoreDraft(text) {
 
 
 
-function onSelect(event) {
-  session.setCurrentUser(Number(event.target.value))
-}
 
 function newChat() {
   thread.clear()
@@ -183,13 +181,7 @@ function token(decision) {
     </div>
 
     <div class="account">
-      <label class="sr-only" for="account-select">계정 전환</label>
-      <span class="avatar" aria-hidden="true">{{ session.currentUser?.name?.[0] ?? '·' }}</span>
-      <select id="account-select" :value="session.currentUserId" @change="onSelect">
-        <option v-for="user in session.users" :key="user.userId" :value="user.userId">
-          {{ user.name }} · {{ user.department.name }}
-        </option>
-      </select>
+      <UserMenu />
     </div>
   </aside>
 </template>
@@ -384,37 +376,10 @@ function token(decision) {
 }
 
 .account {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--nav-line);
 }
 
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--nav-bg-active);
-  color: var(--nav-fg);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-select {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 6px;
-  border: 1px solid var(--nav-line);
-  border-radius: 7px;
-  background: var(--nav-bg-soft);
-  color: var(--nav-fg);
-  font: inherit;
-  font-size: 12.5px;
-}
 
 .sr-only {
   position: absolute;
