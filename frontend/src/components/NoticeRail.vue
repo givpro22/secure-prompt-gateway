@@ -165,7 +165,7 @@ const baseDate = computed(() => {
   display: block;
   font-size: 24px;
   line-height: 1;
-  transform: translateY(-1.5px);
+  transform: translateY(-4px);
 }
 
 .rail-head {
