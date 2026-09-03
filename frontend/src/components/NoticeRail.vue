@@ -67,13 +67,12 @@ const baseDate = computed(() => {
 </script>
 
 <template>
-  <!-- 접었을 때는 다시 펼 수 있는 얇은 띠만 남긴다 -->
+  <!-- 접었을 때는 화살표와 제목만 남긴다. 띠 전체가 버튼이라 어디를 눌러도 펼쳐진다 -->
   <aside v-if="collapsed" class="rail collapsed">
-    <button type="button" class="toggle" aria-label="알아둘 소식 펼치기" @click="collapsed = false">
-      ‹
+    <button type="button" class="reopen" aria-label="알아둘 소식 펼치기" @click="collapsed = false">
+      <span class="arrow" aria-hidden="true">‹</span>
+      <span class="spine" aria-hidden="true">알아둘 소식</span>
     </button>
-    <span class="spine" aria-hidden="true">알아둘 소식</span>
-    <span v-if="notices.length > 0" class="count" aria-hidden="true">{{ notices.length }}</span>
   </aside>
 
   <aside v-else class="rail">
@@ -114,26 +113,44 @@ const baseDate = computed(() => {
 
 <style scoped>
 .rail.collapsed {
-  width: 44px;
+  width: 40px;
+  padding: 0;
+}
+
+/* 띠 전체가 버튼이다. 어디를 눌러도 펼쳐진다 */
+.reopen {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
-  padding: 14px 6px;
+  width: 100%;
+  height: 100%;
+  padding: 14px 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray);
+  font: inherit;
+  /* 세로쓰기는 .spine에만 준다. 버튼까지 번지면 화살표와 제목의 위아래가 뒤집힌다 */
+  writing-mode: horizontal-tb;
+}
+
+.reopen:hover {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+}
+
+.arrow {
+  flex: none;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .spine {
   writing-mode: vertical-rl;
-  font-size: 12.5px;
+  white-space: nowrap;
+  font-size: 13.5px;
   letter-spacing: 0.06em;
-  color: var(--gray);
-}
-
-.count {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--border-strong);
-  color: var(--navy);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .rail-head {
