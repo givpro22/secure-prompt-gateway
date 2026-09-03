@@ -789,6 +789,48 @@ export function fixtureServer() {
           }
 
           /*
+           * 답변 받기 (UC-08 앞단). 실서버는 Claude/OpenAI/Ollama를 부르지만 픽스처는
+           * 모델이 없다. 마스킹본을 되받아 합성 답변을 만든다 — 라벨을 그대로 인용해서
+           * "모델은 가려진 것만 봤다"가 답변에서 보이고, 뒤에 번호 하나를 섞어 출력 검사가
+           * 실제로 잡아내는 것을 보여준다. 픽스처 응답임은 provider 값으로 밝힌다.
+           */
+          if (req.method === 'GET' && path === '/messages/answer/available') {
+            return send(res, 200, { available: true, provider: '픽스처 합성 답변' })
+          }
+          {
+            const ansMatch = path.match(/^\/messages\/(\d+)\/answer$/)
+            if (req.method === 'POST' && ansMatch) {
+              if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
+              const user = USERS.find((u) => u.userId === userId)
+              if (!user) return fail(res, 400, 'INVALID_USER', `user ${userId} not found`)
+              const messageId = Number(ansMatch[1])
+              const source = [...state.inspections.values()].find((i) => i.messageId === messageId && i.phase === 'INPUT')
+              if (!source) return fail(res, 404, 'MESSAGE_NOT_FOUND', `message ${messageId}를 찾을 수 없습니다.`)
+              if (source.user.userId !== userId) return fail(res, 403, 'FORBIDDEN_NOT_AUTHOR', '자기 대화에만 답변을 받을 수 있습니다.')
+              if (source.submittedText === null) return fail(res, 409, 'NOT_SENT', '전송되지 않아 답변이 없습니다.')
+              if ([...state.inspections.values()].some((i) => i.messageId === messageId && i.phase === 'OUTPUT')) {
+                return fail(res, 409, 'RESPONSE_ALREADY_INSPECTED', '이 답변은 이미 검사했습니다.')
+              }
+              const masked = source.submittedText
+              const synthetic =
+                `요청하신 내용을 정리했습니다.\n\n"${masked}"\n\n` +
+                `대괄호로 가려진 부분은 그대로 두었습니다. ` +
+                `추가 확인은 담당자 010-2000-3000 으로 연락 주시면 됩니다.`
+              const out = state.createResponseInspection(source, synthetic)
+              const verdict = {
+                messageId, inspectionId: out.inspectionId, decision: out.finalDecision,
+                inspectedText: out.submittedText, policySnapshot: out.policySnapshot,
+                ruleResult: out.ruleResult, aiStatus: out.aiStatus, decidedBy: out.decidedBy,
+                pollAfterMs: out.finalDecision === 'PENDING' ? POLL_INTERVAL_MS : null,
+                createdAt: out.createdAt,
+              }
+              if (verdict.decision === 'BLOCK') return send(res, 403, verdict)
+              if (verdict.decision === 'PENDING') return send(res, 202, verdict)
+              return send(res, 200, verdict)
+            }
+          }
+
+          /*
            * 출력 검사 (UC-08). 입력과 같은 파이프라인을 그대로 탄다 — 갈리는 것은
            * phase와 텍스트가 들어가는 칸뿐이다.
            */

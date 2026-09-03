@@ -8,7 +8,9 @@ import com.skala.gateway.api.dto.ResponseVerdictResponse;
 import org.springframework.web.bind.annotation.PathVariable;
 import com.skala.gateway.config.CurrentUserId;
 import com.skala.gateway.domain.repository.AppUserRepository;
+import com.skala.gateway.service.AnswerService;
 import com.skala.gateway.service.InspectionService;
+import org.springframework.web.bind.annotation.GetMapping;
 import java.net.URI;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MessageController {
 
     private final InspectionService inspectionService;
+    private final AnswerService answerService;
     private final AppUserRepository appUserRepository;
 
     /**
@@ -47,9 +50,11 @@ public class MessageController {
      */
     private final int maxInputChars;
 
-    public MessageController(InspectionService inspectionService, AppUserRepository appUserRepository,
+    public MessageController(InspectionService inspectionService, AnswerService answerService,
+                             AppUserRepository appUserRepository,
                              @Value("${gateway.limits.max-input-chars}") int maxInputChars) {
         this.inspectionService = inspectionService;
+        this.answerService = answerService;
         this.appUserRepository = appUserRepository;
         this.maxInputChars = maxInputChars;
     }
@@ -85,6 +90,31 @@ public class MessageController {
             case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
         };
     }
+    /**
+     * {@code POST /api/v1/messages/{id}/answer} — 마스킹본을 Claude에 보내 답변을 받고
+     * 곧바로 출력 검사에 넘긴다 (UC-08 한 바퀴).
+     *
+     * <p>응답은 출력 검사 판정 그대로다. 사람이 붙여넣은 것과 같은 모양이라 화면이
+     * 두 경로를 구분하지 않는다. 키가 없으면 503 {@code ANSWER_UNAVAILABLE}이고 화면은
+     * 붙여넣기로 물러난다.
+     */
+    @PostMapping("/messages/{id}/answer")
+    public ResponseEntity<ResponseVerdictResponse> answer(@PathVariable("id") Long messageId,
+                                                          @CurrentUserId Long userId) {
+        ResponseVerdictResponse verdict = answerService.answer(messageId, userId);
+        return switch (verdict.decision()) {
+            case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
+            case PENDING -> ResponseEntity.accepted().body(verdict);
+            default -> ResponseEntity.ok(verdict);
+        };
+    }
+
+    /** {@code GET /api/v1/messages/answer/available} — 화면이 버튼을 그릴지 정하는 데 쓴다 */
+    @GetMapping("/messages/answer/available")
+    public java.util.Map<String, Boolean> answerAvailable() {
+        return java.util.Map.of("available", answerService.enabled());
+    }
+
     /**
      * {@code POST /api/v1/messages/{id}/response} — 출력 검사 (UC-08).
      *

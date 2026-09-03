@@ -167,6 +167,23 @@ public class ApiException extends RuntimeException {
                 "message " + messageId + "의 답변은 이미 검사했습니다.");
     }
 
+    /** 키가 없어 답변 받기가 꺼진 상태. 화면은 이걸 보고 붙여넣기 방식으로 물러난다 */
+    public static ApiException answerUnavailable() {
+        return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "ANSWER_UNAVAILABLE",
+                "답변 받기가 꺼져 있습니다. ANTHROPIC_API_KEY가 설정되지 않았습니다.");
+    }
+
+    public static ApiException answerFailed(String detail) {
+        return new ApiException(HttpStatus.BAD_GATEWAY, "ANSWER_FAILED",
+                "모델에서 답변을 받지 못했습니다. " + detail);
+    }
+
+    /** 모델이 답변을 거절했다. 오류가 아니라 결과다 — 그대로 보여주고 사람이 판단한다 */
+    public static ApiException answerRefused(String explanation) {
+        return new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ANSWER_REFUSED",
+                "모델이 답변을 거절했습니다." + (explanation == null || explanation.isBlank() ? "" : " " + explanation));
+    }
+
     public static ApiException unmaskAlreadyDecided(Object requestId, Object current) {
         return new ApiException(HttpStatus.CONFLICT, "UNMASK_ALREADY_DECIDED",
                 "해제 요청 " + requestId + "는 이미 " + current + "로 확정되었습니다.");

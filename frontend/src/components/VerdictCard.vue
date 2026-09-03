@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { submitResponse } from '../api/messages'
+import { computed, onMounted, ref } from 'vue'
+import { fetchAnswerAvailable, requestAnswer, submitResponse } from '../api/messages'
 import { requestUnmask } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
@@ -199,6 +199,49 @@ async function checkAnswer() {
 
 const answerMatches = computed(() => answerVerdict.value?.ruleResult?.matches ?? [])
 
+/*
+ * 답변 받기 — 게이트웨이가 모델을 직접 불러 답변을 받고 곧바로 출력 검사에 넘긴다.
+ * 붙여넣기(checkAnswer)와 결과 모양이 같아서 아래 렌더링을 그대로 쓴다.
+ *
+ * 서버에 제공자가 켜져 있을 때만 버튼이 뜬다. 키가 없으면 붙여넣기만 남는다.
+ */
+const autoAnswer = ref({ available: false, provider: '' })
+const fetching = ref(false)
+onMounted(async () => {
+  try {
+    autoAnswer.value = await fetchAnswerAvailable()
+  } catch {
+    autoAnswer.value = { available: false, provider: '' }
+  }
+})
+
+async function getAnswer() {
+  if (fetching.value) return
+  fetching.value = true
+  answerError.value = ''
+  try {
+    const res = await requestAnswer(props.verdict.messageId)
+    answerVerdict.value = res.data
+    checking.value = false
+    notifications.push(session.currentUserId, {
+      tone: res.data.decision === 'ALLOW' ? 'allow' : res.data.decision.toLowerCase(),
+      kind: '답변 검사',
+      title: ANSWER_TONE[res.data.decision] ?? '답변을 검사했습니다',
+      body: (res.data.ruleResult?.matches ?? []).map((m) => m.code).join(', ') || '걸린 규칙 없음',
+    })
+  } catch (err) {
+    const code = err?.response?.data?.code
+    answerError.value =
+      code === 'ANSWER_UNAVAILABLE'
+        ? '답변 받기가 꺼져 있습니다. 받은 답변을 붙여넣어 검사하세요.'
+        : (err?.response?.data?.message ?? '답변을 받지 못했습니다.')
+    if (code === 'ANSWER_UNAVAILABLE') autoAnswer.value = { available: false, provider: '' }
+    checking.value = true
+  } finally {
+    fetching.value = false
+  }
+}
+
 /** 알림 한 줄에 들어갈 만큼만 자른다 */
 function shortTitle(text) {
   const one = (text ?? '').replace(/\s+/g, ' ').trim()
@@ -375,6 +418,9 @@ const summary = computed(() => {
         <StatusBadge :value="answerVerdict.decision" />
         <span class="answer-title">답변 재검사 · 규칙 {{ answerMatches.length }}건</span>
       </header>
+      <p v-if="approvedText" class="answer-sent">
+        모델에 보낸 것: <code>{{ approvedText }}</code>
+      </p>
       <p class="answer-note">{{ ANSWER_TONE[answerVerdict.decision] }}</p>
       <ul v-if="answerMatches.length > 0" class="answer-rules">
         <li v-for="m in answerMatches" :key="`${m.code}:${m.span?.[0]}`">
@@ -413,12 +459,22 @@ const summary = computed(() => {
       </span>
       <span class="egress-actions">
         <button
+          v-if="canCheckAnswer && autoAnswer.available"
+          type="button"
+          class="egress-btn ghost"
+          :disabled="fetching"
+          :title="autoAnswer.provider ? `제공자: ${autoAnswer.provider}` : ''"
+          @click="getAnswer"
+        >
+          {{ fetching ? '답변 받는 중…' : '답변 받기' }}
+        </button>
+        <button
           v-if="canCheckAnswer"
           type="button"
           class="egress-btn ghost"
           @click="checking = !checking"
         >
-          답변 검사
+          답변 붙여넣기
         </button>
         <button
           v-if="canAskUnmask"
@@ -644,6 +700,16 @@ const summary = computed(() => {
   color: var(--navy);
   font-size: 13.5px;
   font-weight: 600;
+}
+.answer-sent {
+  margin: 8px 0 0;
+  color: var(--gray);
+  font-size: 12.5px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+.answer-sent code {
+  color: var(--navy);
 }
 .answer-note {
   margin: 8px 0 0;

@@ -22,7 +22,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  */
 @Configuration
 @EnableAsync
-@EnableConfigurationProperties(AiProperties.class)
+@EnableConfigurationProperties({AiProperties.class, AnswerProperties.class})
 public class AsyncConfig implements AsyncConfigurer {
 
     /** 계약서 §4 인계 3에서 {@code @Async}가 참조하는 executor 이름. */
