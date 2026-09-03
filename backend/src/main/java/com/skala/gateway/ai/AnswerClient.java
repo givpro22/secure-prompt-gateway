@@ -29,8 +29,16 @@ public interface AnswerClient {
     }
 
     class AnswerCallException extends RuntimeException {
+        /** 과부하·할당량처럼 다른 모델로 넘어가면 될 수 있는 오류인지 */
+        public final boolean retryable;
+
         public AnswerCallException(String message, Throwable cause) {
+            this(message, cause, false);
+        }
+
+        public AnswerCallException(String message, Throwable cause, boolean retryable) {
             super(message, cause);
+            this.retryable = retryable;
         }
     }
 }
