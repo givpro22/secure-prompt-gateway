@@ -654,11 +654,11 @@ export function createFixtureState() {
       }
       // 마스킹 라벨([내부IP] 등)의 글자는 우리가 붙인 것이라 검사에서 뺀다.
       const plain = text.replace(/\[[^\]]*\]/g, ' ')
-      const marker = ['사내', '내부', '미공개', '대외비', 'NDA', '엠바고'].find((m) => plain.includes(m))
+      const marker = ['대외비', '미공개', '기밀', 'NDA', '엠바고', '런칭 일정'].find((m) => plain.includes(m))
       if (marker) {
         const i = plain.indexOf(marker)
         candidates.push({ code: 'LEAK-INTERNAL-CONTEXT', category: 'CONFIDENTIAL',
-          rationale: '답변이 사내 맥락을 가리키는 표현과 함께 구체 정보를 담고 있습니다. (Mock 검사기 — 사내 모델이 들어오면 문맥 판단으로 대체됩니다)',
+          rationale: '답변이 대외비·미공개 같은 표현과 함께 구체 정보를 담고 있습니다. (Mock 검사기 — 사내 모델이 들어오면 문맥 판단으로 대체됩니다)',
           evidence: [{ source: 'answer', excerpt: plain.slice(Math.max(0, i - 20), i + marker.length + 30).trim() }] })
       }
       inspection.aiStatus = 'COMPLETED'
