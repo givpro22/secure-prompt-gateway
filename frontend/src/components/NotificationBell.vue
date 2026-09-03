@@ -50,11 +50,16 @@ let timer = null
 /** 담당자 — 들어온 요청을 목록으로 받는다 */
 async function pollIncoming() {
   const userId = session.currentUserId
+  // 아직 열려 있는 건의 키. 목록에서 빠진 알림은 확정된 것이라 지울 수 있게 푼다.
+  const alive = []
   // 답변 유출 의심 (UC-08 후단). 유출 검사가 검토 대기로 돌린 답변 검사가 여기 잡힌다.
   try {
     const page = await fetchInspections({ phase: 'OUTPUT', status: 'PENDING_REVIEW', size: 20 })
     for (const row of page.items ?? []) {
+      alive.push(`leak:${row.inspectionId}`)
       notifications.pushOnce(userId, `leak:${row.inspectionId}`, {
+        pending: true,
+        watchKey: `leak:${row.inspectionId}`,
         tone: 'block',
         kind: '유출 의심',
         title: `${row.userName} 님이 받은 답변에 원문 유출 의심 — 확인 필요`,
@@ -68,7 +73,10 @@ async function pollIncoming() {
   try {
     const page = await fetchUnmaskRequests({ status: 'PENDING', size: 20 })
     for (const row of page.items ?? []) {
+      alive.push(`unmask:${row.requestId}`)
       notifications.pushOnce(userId, `unmask:${row.requestId}`, {
+        pending: true,
+        watchKey: `unmask:${row.requestId}`,
         tone: 'request',
         kind: '해제 요청',
         title: `${row.requester.name} 님이 마스킹 검토를 요청했습니다`,
@@ -79,6 +87,7 @@ async function pollIncoming() {
   } catch {
     // 권한이 없거나 서버가 잠깐 없는 경우다. 종에 오류를 띄울 일은 아니다.
   }
+  notifications.settle(userId, alive)
 }
 
 const OUTCOME = {
@@ -103,6 +112,7 @@ async function pollOutcome() {
           ? `${row.decidedBy}: ${row.decisionNote}`
           : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
       })
+      notifications.settle(userId, [])
       notifications.unwatch(userId, w.messageId)
     } catch {
       // 아직 없거나 잠깐 실패한 것이다. 다음 차례에 다시 묻는다.
@@ -178,8 +188,15 @@ onUnmounted(() => {
       <header class="pop-head">
         <span class="pop-title">알림</span>
         <span class="pop-who">{{ session.currentUser?.name }}</span>
-        <button v-if="items.length > 0" type="button" class="pop-clear" @click="notifications.clear()">
-          지우기
+        <!-- 열려 있는 건은 남는다. 문구로 미리 말해 두면 안 지워졌다고 오해하지 않는다 -->
+        <button
+          v-if="items.length > 0"
+          type="button"
+          class="pop-clear"
+          title="검토가 끝난 알림만 지웁니다"
+          @click="notifications.clear()"
+        >
+          읽은 알림 지우기
         </button>
       </header>
 
@@ -192,6 +209,16 @@ onUnmounted(() => {
           <span class="row-head">
             <span class="kind">{{ n.kind }}</span>
             <span class="time">{{ clock(n.at) }}</span>
+            <button
+              type="button"
+              class="row-del"
+              :disabled="n.pending"
+              :title="n.pending ? '검토가 끝나야 지울 수 있습니다' : '알림 지우기'"
+              :aria-label="`${n.kind} 알림 지우기`"
+              @click="notifications.remove(n.id)"
+            >
+              ×
+            </button>
           </span>
           <span class="row-title">{{ n.title }}</span>
           <span v-if="n.body" class="row-body">{{ n.body }}</span>
@@ -335,6 +362,32 @@ onUnmounted(() => {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+/* 검토가 끝난 알림만 지운다. 열려 있는 건은 흐리게 두어 왜 안 되는지 보이게 한다 */
+.row-del {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  color: var(--gray);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.row:hover .row-del,
+.row-del:focus-visible {
+  opacity: 1;
+}
+.row-del:hover:not(:disabled) {
+  color: var(--navy);
+}
+.row-del:disabled {
+  cursor: not-allowed;
+}
+.row:hover .row-del:disabled {
+  opacity: 0.3;
 }
 .kind {
   color: var(--navy);
