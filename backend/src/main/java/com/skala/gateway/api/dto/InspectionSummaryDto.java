@@ -5,6 +5,8 @@ import com.skala.gateway.domain.Message;
 import com.skala.gateway.domain.enums.AiStatus;
 import com.skala.gateway.domain.enums.DecidedBy;
 import com.skala.gateway.domain.enums.MessageStatus;
+import com.skala.gateway.domain.enums.FinalDecision;
+import com.skala.gateway.domain.enums.InspectionPhase;
 import java.time.OffsetDateTime;
 
 /**
@@ -18,6 +20,7 @@ import java.time.OffsetDateTime;
  */
 public record InspectionSummaryDto(
         Long inspectionId,
+        InspectionPhase phase,
         OffsetDateTime createdAt,
         String department,
         String userName,
@@ -35,15 +38,29 @@ public record InspectionSummaryDto(
 
     public static InspectionSummaryDto of(Inspection inspection, long ruleCount) {
         Message message = inspection.getMessage();
+        boolean output = inspection.getPhase() == InspectionPhase.OUTPUT;
         return new InspectionSummaryDto(
                 inspection.getInspectionId(),
+                inspection.getPhase(),
                 ApiTimes.utc(inspection.getCreatedAt()),
                 message.getUser().getDepartment().getName(),
                 message.getUser().getName(),
-                message.getStatus(),
+                // 답변 검사 행의 상태는 그 검사의 판정이다. message.status는 프롬프트 것이다.
+                output ? statusOf(inspection.getFinalDecision()) : message.getStatus(),
                 ruleCount,
                 inspection.getAiStatus(),
                 inspection.getDecidedBy(),
-                message.getSubmittedText());
+                output ? message.getResponseMasked() : message.getSubmittedText());
+    }
+
+    /** 검사 판정을 화면 상태로. 입력 쪽 {@code InspectionService.statusOf}와 같은 대응이다 */
+    static MessageStatus statusOf(FinalDecision d) {
+        if (d == null) return MessageStatus.PENDING_REVIEW;
+        return switch (d) {
+            case ALLOW -> MessageStatus.ALLOWED;
+            case MASK -> MessageStatus.MASKED;
+            case BLOCK -> MessageStatus.BLOCKED;
+            case PENDING -> MessageStatus.PENDING_REVIEW;
+        };
     }
 }

@@ -526,6 +526,7 @@ export function createFixtureState() {
     settleAi(inspection)
     return {
       inspectionId: inspection.inspectionId,
+      phase: inspection.phase,
       createdAt: inspection.createdAt,
       department: inspection.user.department,
       userName: inspection.user.name,
@@ -630,8 +631,84 @@ export function createFixtureState() {
       _aiReadyAt: isReview ? Date.now() + AI_MOCK_DELAY_MS : 0,
       _forceAiStatus: null,
     }
+
+    /*
+     * 유출 검사 (UC-08 후단). 백엔드와 같은 세 겹 — 가린 값 되살림, 코드 되돌림(40자
+     * 이상 그대로 겹침), 사내 맥락 표지어(Mock). 하나라도 걸리면 검토 대기로 돌리고
+     * 담당자 제안(AI finding)을 붙인다. 확정은 담당자가 한다.
+     */
+    if (result.decision !== 'BLOCK' && !isReview) {
+      const candidates = []
+      for (const hidden of hiddenValues(source._text, source.submittedText)) {
+        if (hidden.length >= 3 && text.includes(hidden)) {
+          candidates.push({ code: 'LEAK-RECONSTRUCT', category: 'CONFIDENTIAL',
+            rationale: '프롬프트에서 가렸던 값이 답변에 그대로 나타났습니다. 모델이 가려진 값을 알아낸 것이므로 마스킹이 무력화됐습니다.',
+            evidence: [{ source: 'answer', excerpt: hidden }] })
+        }
+      }
+      const overlap = longestCommon(text, source.submittedText)
+      if (overlap.length >= 40) {
+        candidates.push({ code: 'LEAK-CODE-ECHO', category: 'CONFIDENTIAL',
+          rationale: `답변이 프롬프트 본문을 ${overlap.length}자 이상 그대로 되돌려줍니다. 사내 코드나 문서가 외부 모델을 거쳐 그대로 나온 것으로, 원문 유출 여부를 담당자가 확인해야 합니다.`,
+          evidence: [{ source: 'answer', excerpt: overlap }] })
+      }
+      // 마스킹 라벨([내부IP] 등)의 글자는 우리가 붙인 것이라 검사에서 뺀다.
+      const plain = text.replace(/\[[^\]]*\]/g, ' ')
+      const marker = ['사내', '내부', '미공개', '대외비', 'NDA', '엠바고'].find((m) => plain.includes(m))
+      if (marker) {
+        const i = plain.indexOf(marker)
+        candidates.push({ code: 'LEAK-INTERNAL-CONTEXT', category: 'CONFIDENTIAL',
+          rationale: '답변이 사내 맥락을 가리키는 표현과 함께 구체 정보를 담고 있습니다. (Mock 검사기 — 사내 모델이 들어오면 문맥 판단으로 대체됩니다)',
+          evidence: [{ source: 'answer', excerpt: plain.slice(Math.max(0, i - 20), i + marker.length + 30).trim() }] })
+      }
+      inspection.aiStatus = 'COMPLETED'
+      inspection.aiAssessment = { riskCandidates: candidates, missingContext: [], reviewRequired: candidates.length > 0 }
+      if (candidates.length > 0) {
+        inspection.finalDecision = 'PENDING'
+        inspection.status = 'PENDING_REVIEW'
+        inspection.decidedBy = null
+        inspection.completedAt = null
+        for (const c of candidates) {
+          inspection.findings.push({ findingId: nextFindingId++, source: 'AI', code: c.code, category: c.category,
+            spanStart: null, spanEnd: null, action: null, rationale: c.rationale, evidence: c.evidence,
+            reviewStatus: 'SUGGESTED', reviewedBy: null, reviewedAt: null })
+        }
+      }
+    }
     inspections.set(inspection.inspectionId, inspection)
     return inspection
+  }
+
+  /** 원문→마스킹본에서 라벨로 바뀐 자리의 원문 조각들 (백엔드 RuleLeakInspector와 같은 규칙) */
+  function hiddenValues(original, masked) {
+    const out = []
+    let oi = 0, mi = 0
+    while (mi < masked.length) {
+      if (masked[mi] === '[') {
+        const close = masked.indexOf(']', mi)
+        if (close < 0) break
+        const after = masked.slice(close + 1, close + 6)
+        let end = after ? original.indexOf(after, oi) : original.length
+        if (end < 0) end = original.length
+        const hidden = original.slice(oi, end).trim()
+        if (hidden) out.push(hidden)
+        oi = end; mi = close + 1
+      } else { oi++; mi++ }
+    }
+    return out
+  }
+
+  /** 최장 공통 부분문자열. 직전 행만 들고 도는 O(min) 메모리 (QuoteOverlapDetector와 같음) */
+  function longestCommon(a, b) {
+    let best = 0, bestEnd = 0, prev = new Array(b.length + 1).fill(0)
+    for (let i = 1; i <= a.length; i++) {
+      const cur = new Array(b.length + 1).fill(0)
+      for (let j = 1; j <= b.length; j++) {
+        if (a[i - 1] === b[j - 1]) { cur[j] = prev[j - 1] + 1; if (cur[j] > best) { best = cur[j]; bestEnd = i } }
+      }
+      prev = cur
+    }
+    return a.slice(bestEnd - best, bestEnd)
   }
 
   function createUnmaskRequest(messageId, user, reason) {
@@ -812,10 +889,13 @@ export function fixtureServer() {
                 return fail(res, 409, 'RESPONSE_ALREADY_INSPECTED', '이 답변은 이미 검사했습니다.')
               }
               const masked = source.submittedText
-              const synthetic =
-                `요청하신 내용을 정리했습니다.\n\n"${masked}"\n\n` +
-                `대괄호로 가려진 부분은 그대로 두었습니다. ` +
-                `추가 확인은 담당자 010-2000-3000 으로 연락 주시면 됩니다.`
+              const looksLikeCode = /[;{}()=]\s*$/m.test(masked) || /\b(int|const|let|var|def|return|public|private)\b/.test(masked)
+              // 코드 질문이면 모델이 하듯 고친 코드를 통째로 돌려준다 — 그게 코드 되돌림 검사가 잡는 장면이다.
+              const synthetic = looksLikeCode
+                ? `문제가 될 만한 곳을 고쳤습니다.\n\n${masked.split('\n').filter((l) => /[;{}()]/.test(l)).join('\n')}\n\nnull 가능성이 있는 값은 기본값으로 막았습니다.`
+                : `요청하신 내용을 정리했습니다.\n\n"${masked}"\n\n` +
+                  `대괄호로 가려진 부분은 그대로 두었습니다. ` +
+                  `추가 확인은 담당자 010-2000-3000 으로 연락 주시면 됩니다.`
               const out = state.createResponseInspection(source, synthetic)
               const verdict = {
                 messageId, inspectionId: out.inspectionId, decision: out.finalDecision,
@@ -979,6 +1059,8 @@ export function fixtureServer() {
             let items = [...state.inspections.values()].map((i) => state.toRow(i))
             const deptId = query.get('deptId')
             const status = query.get('status')
+            const phase = query.get('phase')
+            if (phase) items = items.filter((i) => i.phase === phase)
             const from = query.get('from')
             const to = query.get('to')
             if (deptId) {

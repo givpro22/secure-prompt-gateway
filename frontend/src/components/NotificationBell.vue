@@ -13,6 +13,7 @@
  * 목록 API가 담당자 전용이라(D25) 요청자가 결과를 알 길이 그것뿐이기도 하다.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { fetchInspections } from '../api/inspections'
 import { fetchMyUnmaskRequest, fetchUnmaskRequests } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
@@ -49,6 +50,21 @@ let timer = null
 /** 담당자 — 들어온 요청을 목록으로 받는다 */
 async function pollIncoming() {
   const userId = session.currentUserId
+  // 답변 유출 의심 (UC-08 후단). 유출 검사가 검토 대기로 돌린 답변 검사가 여기 잡힌다.
+  try {
+    const page = await fetchInspections({ phase: 'OUTPUT', status: 'PENDING_REVIEW', size: 20 })
+    for (const row of page.items ?? []) {
+      notifications.pushOnce(userId, `leak:${row.inspectionId}`, {
+        tone: 'block',
+        kind: '유출 의심',
+        title: `${row.userName} 님이 받은 답변에 원문 유출 의심 — 확인 필요`,
+        body: row.submittedText ? row.submittedText.slice(0, 80) : '',
+        link: '/admin/audit',
+      })
+    }
+  } catch {
+    // 권한이 없거나 서버가 잠깐 없는 경우다.
+  }
   try {
     const page = await fetchUnmaskRequests({ status: 'PENDING', size: 20 })
     for (const row of page.items ?? []) {

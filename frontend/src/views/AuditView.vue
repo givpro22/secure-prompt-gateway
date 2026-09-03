@@ -420,7 +420,11 @@ onMounted(async () => {
                 :class="{ selected: row.inspectionId === selectedId }"
                 @click="loadDetail(row.inspectionId)"
               >
-                <td class="time">{{ formatTime(row.createdAt) }}</td>
+                <td class="time">
+                  {{ formatTime(row.createdAt) }}
+                  <!-- 답변 검사 행은 프롬프트 행과 같은 표에 섞여 있다. 어느 쪽인지 표시한다 (UC-08) -->
+                  <span v-if="row.phase === 'OUTPUT'" class="phase-tag">답변</span>
+                </td>
                 <td>
                   <span class="who">
                     <strong>{{ row.userName }}</strong>
@@ -496,6 +500,9 @@ onMounted(async () => {
           <!-- 1. 원문 — 마스킹본만. 원문(original_text)은 응답에 없고 표시하지도 않는다 -->
           <section class="section">
             <h3 class="section-title">마스킹 본문 · 원문은 표시하지 않습니다</h3>
+            <p v-if="detail.phase === 'OUTPUT'" class="phase-note caption">
+              답변 검사 — 모델이 돌려준 답변을 같은 정책으로 다시 본 결과입니다. 아래 본문은 답변입니다.
+            </p>
             <p v-if="detail.submittedText === null" class="empty caption">
               차단되어 전송 본문이 저장되지 않았습니다.
             </p>
@@ -687,6 +694,24 @@ th {
   background: var(--card);
 }
 
+.phase-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #eef1f6;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.phase-note {
+  margin: 0 0 8px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: #eef1f6;
+  color: var(--navy);
+}
 .row.selected {
   background: var(--card);
   border-left-color: var(--blue);
