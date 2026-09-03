@@ -1,0 +1,47 @@
+{
+  "base": "http://localhost:5174",
+  "width": 1440,
+  "dpr": 2,
+  "shots": [
+    {
+      "name": "08_audit_list",
+      "viewport": "1440x1963"
+    },
+    {
+      "name": "09_audit_detail_before",
+      "viewport": "1440x1963"
+    },
+    {
+      "name": "10_audit_detail_after",
+      "viewport": "1440x1963"
+    },
+    {
+      "name": "01_s1_input",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "02_allow",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "03_mask",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "04_block",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "05_embargo",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "06_review_pending",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "07_ai_candidate",
+      "viewport": "1440x977"
+    }
+  ]
+}
