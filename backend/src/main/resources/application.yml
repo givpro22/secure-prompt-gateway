@@ -54,7 +54,8 @@ answer:
   #   claude → ANTHROPIC_API_KEY
   #   openai → ANSWER_ENDPOINT(예: https://api.openai.com/v1, https://api.groq.com/openai/v1) + ANSWER_API_KEY
   #   ollama → ANSWER_ENDPOINT(예: http://localhost:11434), 키 없음, 외부로 안 나감
-  provider: ${ANSWER_PROVIDER:claude}
+  #   비워 두면 endpoint 유무로 정한다 — endpoint 있으면 openai, 없으면 claude. ollama는 명시.
+  provider: ${ANSWER_PROVIDER:}
   endpoint: ${ANSWER_ENDPOINT:}
   api-key: ${ANSWER_API_KEY:${ANTHROPIC_API_KEY:}}
   # openai 제공자는 쉼표로 여러 개를 줄 수 있다. 앞이 과부하·할당량이면 다음으로 넘어간다.
