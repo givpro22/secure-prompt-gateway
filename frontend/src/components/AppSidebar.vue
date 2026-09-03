@@ -199,7 +199,38 @@ const DEMO_HISTORY_BY_USER = {
 }
 
 /** 지금 계정의 데모 이력. 없는 계정은 빈 목록이다 */
-const demoHistory = computed(() => DEMO_HISTORY_BY_USER[session.currentUserId] ?? [])
+/*
+ * 이 계정의 데모 이력. 지운 것은 뺀다 — 카탈로그가 정적이라 실제로 지울 대상이 없어
+ * 화면에서 감추는 것으로 대신한다.
+ */
+const demoHistory = computed(() =>
+  (DEMO_HISTORY_BY_USER[session.currentUserId] ?? [])
+    .map((block) => ({
+      ...block,
+      items: block.items.filter((i) => !thread.hiddenDemos.includes(i.key)),
+    }))
+    .filter((block) => block.items.length > 0),
+)
+
+/**
+ * 검토 대기는 못 지운다. 담당자가 아직 확정하지 않은 대화를 작성자가 치우면,
+ * 확정하라고 알림을 받은 사람과 그 대화를 아는 사람이 어긋난다.
+ */
+function pendingDemo(item) {
+  const opened = thread.sessions.find((s) => s.demoKey === item.key)
+  return (opened ? opened.decision : item.decision) === 'PENDING'
+}
+
+function removeSession(s) {
+  thread.remove(s.id)
+}
+
+function removeDemo(item) {
+  if (pendingDemo(item)) return
+  const opened = thread.sessions.find((s) => s.demoKey === item.key)
+  if (opened) thread.remove(opened.id)
+  else thread.hideDemo(item.key)
+}
 
 /*
  * 계정별 시연용 작성 중 초안. 부서에 따라 쓰는 말이 다르다는 것을 보여주는 자리다.
@@ -235,7 +266,7 @@ const isAdmin = computed(() => session.currentUser?.role === 'SECURITY_ADMIN')
  * 보이고, 누를수록 쌓이기만 한다.
  */
 function openDemo(item) {
-  thread.openDemo(item.key, item.prompts, item.answers ?? [])
+  thread.openDemo(item.key, item.prompts, item.answers ?? [], item.text)
   if (router.currentRoute.value.name !== 'chat') router.push('/chat')
 }
 
@@ -281,19 +312,34 @@ function token(decision) {
     </nav>
 
     <div class="scroll">
-      <section v-if="thread.current" class="history">
+      <!--
+        이번에 연 대화들이 쌓인다. 앞의 것이 밀려나지 않으므로 콘솔에 확정하러 갔다
+        와도 방금 시연한 세션이 그대로 있고, 눌러서 오갈 수 있다.
+      -->
+      <section v-if="thread.sessions.length > 0" class="history">
         <h2>이번 세션</h2>
         <ul>
-          <li>
+          <li v-for="s in thread.sessions" :key="s.id">
             <button
               type="button"
               class="history-item"
-              :class="{ current: thread.viewing === 'own' }"
-              @click="thread.resumeOwn()"
+              :class="{ current: thread.activeId === s.id }"
+              @click="thread.activate(s.id)"
             >
-              <span class="dot" :class="`t-${token(thread.current.decision)}`" aria-hidden="true" />
-              <span class="text">{{ thread.current.title }}</span>
-              <span v-if="thread.current.turns > 1" class="turns">{{ thread.current.turns }}턴</span>
+              <span class="dot" :class="`t-${token(s.decision)}`" aria-hidden="true" />
+              <span class="text">{{ s.title || '새 대화' }}</span>
+              <span v-if="s.turns > 1" class="turns">{{ s.turns }}턴</span>
+              <span v-if="s.kind === 'demo'" class="demo">(demo)</span>
+            </button>
+            <button
+              type="button"
+              class="del"
+              :disabled="s.decision === 'PENDING'"
+              :title="s.decision === 'PENDING' ? '검토 대기 중이라 지울 수 없습니다' : '대화 지우기'"
+              :aria-label="`${s.title || '새 대화'} 지우기`"
+              @click.stop="removeSession(s)"
+            >
+              ×
             </button>
           </li>
         </ul>
@@ -334,13 +380,23 @@ function token(decision) {
             <button
               type="button"
               class="history-item"
-              :class="{ current: thread.viewing === item.key }"
+              :class="{ current: thread.active?.demoKey === item.key }"
               @click="openDemo(item)"
             >
               <span class="dot" :class="`t-${token(item.decision)}`" aria-hidden="true" />
               <span class="text">{{ item.text }}</span>
               <span v-if="item.prompts.length > 1" class="turns">{{ item.prompts.length }}턴</span>
               <span class="demo">(demo)</span>
+            </button>
+            <button
+              type="button"
+              class="del"
+              :disabled="pendingDemo(item)"
+              :title="pendingDemo(item) ? '검토 대기 중이라 지울 수 없습니다' : '대화 지우기'"
+              :aria-label="`${item.text} 지우기`"
+              @click.stop="removeDemo(item)"
+            >
+              ×
             </button>
           </li>
         </ul>
@@ -513,6 +569,49 @@ function token(decision) {
 }
 .t-purple {
   background: #a78bde;
+}
+
+/*
+ * 지우기 버튼. 항목 위에 겹쳐 두고 hover·focus에서만 보인다 — 목록이 x로 시끄러워지지
+ * 않으면서, 마우스를 올리면 지울 수 있다는 것이 드러난다.
+ */
+.history li {
+  position: relative;
+}
+.del {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--nav-fg-dim);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.history li:hover .del,
+.del:focus-visible {
+  opacity: 1;
+}
+.del:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--nav-fg);
+}
+.del:disabled {
+  cursor: not-allowed;
+}
+.history li:hover .del:disabled {
+  opacity: 0.35;
 }
 
 .none {

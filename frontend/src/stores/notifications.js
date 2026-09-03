@@ -74,14 +74,43 @@ export const useNotificationStore = defineStore('notifications', {
       return true
     },
 
+    /**
+     * 알림 하나를 지운다.
+     *
+     * 아직 열려 있는 건(`pending`)은 못 지운다. 확정을 기다리는 알림을 치우면 해야 할
+     * 일이 목록에서만 없어지고 실제로는 남는다 — 대화 목록의 검토 대기와 같은 이유다.
+     * 지워지는 것은 내 알림함뿐이고 서버의 검사·요청 기록은 그대로다.
+     */
+    remove(id) {
+      const box = this.byUser[this.userId]
+      if (!box) return false
+      const n = box.items.find((x) => x.id === id)
+      if (!n || n.pending) return false
+      box.items = box.items.filter((x) => x.id !== id)
+      return true
+    },
+
+    /**
+     * 서버에서 아직 열려 있는 것만 남기고 나머지를 닫힌 상태로 바꾼다.
+     * 담당자가 확정하면 목록에서 빠지므로, 폴링이 그 사실을 알림에 옮긴다.
+     */
+    settle(userId, aliveKeys) {
+      const box = this.byUser[userId]
+      if (!box) return
+      for (const n of box.items) {
+        if (n.pending && n.watchKey && !aliveKeys.includes(n.watchKey)) n.pending = false
+      }
+    },
+
     markAllRead() {
       const box = this.byUser[this.userId]
       if (box) box.items.forEach((n) => (n.read = true))
     },
 
+    /** 다 지우기 — 열려 있는 건은 남는다 */
     clear() {
       const box = this.byUser[this.userId]
-      if (box) box.items = []
+      if (box) box.items = box.items.filter((n) => n.pending)
     },
   },
 })
