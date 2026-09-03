@@ -293,6 +293,8 @@ textarea {
   flex: 1;
   padding: 10px 12px 6px;
   border: 0;
+  /* 브라우저 기본 초점 테두리를 끈다. 초점 표시는 바깥 상자가 대신 한다 */
+  outline: none;
   resize: none;
   line-height: 1.6;
   background: transparent;
@@ -300,13 +302,6 @@ textarea {
   color: inherit;
 }
 
-textarea:focus {
-  outline: none;
-}
-
-.field:focus-within {
-  border-color: var(--blue);
-}
 
 /* 글 아래 도구 줄. ＋와 받는 형식이 여기 산다 */
 /*
@@ -377,9 +372,17 @@ textarea:focus {
   }
 }
 
-textarea:focus {
-  outline: 2px solid var(--blue);
-  outline-offset: -1px;
+/*
+ * 초점 표시는 바깥 상자가 받는다.
+ *
+ * 전에는 textarea가 직접 파란 outline을 그렸다. 테두리가 하나뿐이던 시절에는 그것이
+ * 곧 입력창의 테두리였는데, ＋ 줄이 생기면서 상자가 .field로 옮겨 간 뒤로는 상자 안에
+ * 파란 상자가 하나 더 그려져 칸이 나뉘어 보였다.
+ */
+.field:focus-within {
+  border-color: var(--blue);
+  outline: 1px solid var(--blue);
+  outline-offset: -2px;
 }
 
 .send {
