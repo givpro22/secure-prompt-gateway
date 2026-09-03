@@ -83,6 +83,7 @@ const EXTERNAL_LLMS = [
 
 const copied = ref(false)
 const targetId = ref(EXTERNAL_LLMS[0].id)
+const selectedLlm = computed(() => EXTERNAL_LLMS.find((l) => l.id === targetId.value))
 
 async function sendToSelected() {
   const text = approvedText.value
@@ -96,7 +97,10 @@ async function sendToSelected() {
     // 클립보드가 막힌 환경(비 HTTPS 등)에서도 창은 열어준다. 사용자가 직접 복사한다.
     copied.value = false
   }
-  window.open(target.url, '_blank', 'noopener,noreferrer')
+  const url = target.prefill
+    ? `${target.url}?${target.prefill}=${encodeURIComponent(text)}`
+    : target.url
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 const isAllow = computed(() => props.verdict.decision === 'ALLOW')
@@ -179,7 +183,9 @@ const summary = computed(() => {
       </span>
       <span class="egress-actions">
         <LlmPicker v-model="targetId" :options="EXTERNAL_LLMS" />
-        <button type="button" class="egress-btn" @click="sendToSelected">프롬프트 입력</button>
+        <button type="button" class="egress-btn" @click="sendToSelected">
+          {{ selectedLlm?.prefill ? '바로 전송' : '복사 후 열기' }}
+        </button>
       </span>
     </div>
   </section>
