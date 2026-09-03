@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { SEVERITY } from '../lib/decision'
 
 /*
  * 사이드바가 읽는 대화 목록.
@@ -16,8 +17,6 @@ import { defineStore } from 'pinia'
  * 물었는지가 섞인다. 부서에 따라 판정이 갈리는 것이 이 데모의 핵심이라 더 그렇다.
  */
 
-/** 판정 심각도. 대화 전체를 대표하는 값은 가장 심한 것이다 */
-const SEVERITY = { ALLOW: 0, ALLOWED: 0, MASK: 1, MASKED: 1, PENDING: 2, PENDING_REVIEW: 2, BLOCK: 3, BLOCKED: 3 }
 
 /** 아직 자리가 없는 계정을 읽을 때 돌려주는 빈 칸 */
 const EMPTY = Object.freeze({ sessions: [], activeId: null, writing: null, hiddenDemos: [] })

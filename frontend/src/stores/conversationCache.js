@@ -1,3 +1,5 @@
+import { entryDecision, worse } from '../lib/decision'
+
 /*
  * 세션별 대화 본문 캐시.
  *
@@ -9,6 +11,20 @@
  * 새로고침에 살아남을 필요도 없기 때문이다(영속화는 범위 밖, 0.3).
  */
 export const conversationCache = new Map()
+
+/**
+ * 이 대화를 대표하는 판정. 사이드바 점과 삭제 가능 여부가 이 값을 본다.
+ *
+ * 턴마다 다시 센다 — 담당자 확정으로 판정이 오르내리기 때문이다. 검토 대기가
+ * 허용으로 풀리면 값이 내려가야 하는데, 올리기만 하는 방식으로는 영영 안 내려간다.
+ */
+export function sessionDecision(sessionId) {
+  const entries = conversationCache.get(sessionId)
+  if (!entries || entries.length === 0) return null
+  let worst = null
+  for (const entry of entries) worst = worse(worst, entryDecision(entry))
+  return worst
+}
 
 /**
  * 캐시에 있는 모든 대화에서 이 검사 건의 턴을 찾는다.
@@ -26,7 +42,13 @@ export function findByInspection(inspectionId) {
   if (inspectionId == null) return null
   for (const [sessionId, entries] of conversationCache) {
     for (const entry of entries ?? []) {
-      if (entry?.verdict?.inspectionId === inspectionId) return { sessionId, entry }
+      // 한 턴에 검사가 둘이다 — 보낸 프롬프트(INPUT)와 받은 답변(OUTPUT).
+      if (entry?.verdict?.inspectionId === inspectionId) {
+        return { sessionId, entry, target: 'prompt' }
+      }
+      if (entry?.answer?.inspectionId === inspectionId) {
+        return { sessionId, entry, target: 'answer' }
+      }
     }
   }
   return null

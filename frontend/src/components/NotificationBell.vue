@@ -15,7 +15,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { fetchInspection, fetchInspections } from '../api/inspections'
 import { fetchMyUnmaskRequest, fetchUnmaskRequests } from '../api/unmask'
-import { findByInspection, findByMessage } from '../stores/conversationCache'
+import { findByInspection, findByMessage, sessionDecision } from '../stores/conversationCache'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
@@ -106,6 +106,16 @@ const REVIEW_OUTCOME = {
 }
 
 /*
+ * 답변(phase=OUTPUT) 확정은 말이 달라야 한다. 같은 문장을 쓰면 "전송이 거절되었습니다"가
+ * 뜨는데, 정작 거절된 것은 내가 보낸 프롬프트가 아니라 모델이 돌려준 답변이다.
+ */
+const ANSWER_OUTCOME = {
+  ALLOWED: { tone: 'allow', kind: '답변 승인', verb: '받은 답변이 문제없는 것으로 확정되었습니다' },
+  MASKED: { tone: 'mask', kind: '답변 마스킹', verb: '답변에서 탐지된 항목을 가린 채 확정되었습니다' },
+  BLOCKED: { tone: 'block', kind: '답변 거절', verb: '받은 답변이 원문 유출로 확정되었습니다' },
+}
+
+/*
  * 요청자 — 내가 올린 건이 어떻게 됐는지 하나씩 묻는다.
  *
  * 두 종류를 함께 본다. 마스킹 해제 요청(D25)과 검토 대기 건의 확정(D12)이다. 뒤엣것은
@@ -135,7 +145,12 @@ async function settleReview(userId, w) {
   // 사람이 확정하기 전까지는 finalDecision이 PENDING이다. AI 분석이 끝난 것과 다르다.
   if (!inspection || inspection.finalDecision === 'PENDING') return
 
-  const o = REVIEW_OUTCOME[inspection.status] ?? REVIEW_OUTCOME.BLOCKED
+  const found = findByInspection(w.inspectionId)
+  // 감시를 걸 때 적어 둔 것을 먼저 믿는다. 대화가 이미 지워졌으면 캐시에 없다.
+  const target = w.target ?? found?.target ?? 'prompt'
+  const table = target === 'answer' ? ANSWER_OUTCOME : REVIEW_OUTCOME
+  const o = table[inspection.status] ?? table.BLOCKED
+
   notifications.pushOnce(userId, `review:${w.inspectionId}`, {
     tone: o.tone,
     kind: o.kind,
@@ -146,15 +161,24 @@ async function settleReview(userId, w) {
   })
 
   // 대화에도 같은 결과를 적는다. 화면에 떠 있지 않은 세션이어도 캐시에서 찾아 고친다.
-  const found = findByInspection(w.inspectionId)
-  if (found) {
+  if (found && found.target === 'answer') {
+    /*
+     * 답변 확정은 답변 절에만 적는다. 프롬프트는 이미 나갔고 그 판정은 그대로다 —
+     * 답변이 막혔다고 해서 보낸 문장이 차단됐던 것으로 바뀌면 기록이 거짓이 된다.
+     */
+    found.entry.answer = {
+      ...found.entry.answer,
+      settled: { status: inspection.status, decidedBy: inspection.decidedBy },
+    }
+  } else if (found) {
     found.entry.inspection = inspection
     found.entry.aiStatus = inspection.aiStatus
     found.entry.note = ''
-    thread.settleDecision(found.sessionId, inspection.status)
-  } else if (w.sessionId) {
-    thread.settleDecision(w.sessionId, inspection.status)
   }
+
+  // 사이드바 점은 대화 전체를 다시 세어 정한다. 허용으로 풀린 건은 값이 내려가야 한다.
+  const sessionId = found?.sessionId ?? w.sessionId
+  if (sessionId) thread.settleDecision(sessionId, sessionDecision(sessionId) ?? inspection.status)
 
   notifications.settle(userId, [])
   notifications.unwatch(userId, w.key)
