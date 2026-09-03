@@ -8,6 +8,7 @@ import com.skala.gateway.domain.Inspection;
 import com.skala.gateway.domain.InspectionFinding;
 import com.skala.gateway.domain.enums.DecidedBy;
 import com.skala.gateway.domain.enums.FinalDecision;
+import com.skala.gateway.domain.enums.UserRole;
 import com.skala.gateway.domain.enums.FindingSource;
 import com.skala.gateway.domain.enums.MessageStatus;
 import com.skala.gateway.domain.enums.ReviewStatus;
@@ -72,12 +73,18 @@ public class ReviewService {
      * 먼저 의심한다.
      *
      * @param userId {@code X-User-Id}. 그대로 {@code reviewed_by}에 기록한다 — 역할 검사
-     *               (SECURITY_ADMIN 여부)는 하지 않는다. 로그인·권한이 범위 밖이다 (0.3, 계약서 §1-7)
+     *               <b>역할은 검사한다</b> — SECURITY_ADMIN이 아니면 403이다 (0.5.1 D24).
+     *               인증은 여전히 없다. X-User-Id는 누구인지 말할 뿐 그 사람임을 증명하지 않는다
      */
     @Transactional
     public ReviewResponse review(Long inspectionId, Long findingId, Long userId, ReviewRequest request) {
         AppUser reviewer = appUserRepository.findById(userId)
                 .orElseThrow(() -> ApiException.invalidUser(userId));
+
+        // 확정은 보안 담당자만 (0.5.1 D24). 화면에서만 버튼을 가리면 경계가 주장에 그친다.
+        if (reviewer.getRole() != UserRole.SECURITY_ADMIN) {
+            throw ApiException.notReviewer(userId);
+        }
 
         Inspection inspection = inspectionRepository.findDetailById(inspectionId)
                 .orElseThrow(() -> ApiException.inspectionNotFound(inspectionId));

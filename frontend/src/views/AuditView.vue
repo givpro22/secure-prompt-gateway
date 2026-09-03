@@ -42,6 +42,60 @@ const busyFindingId = ref(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
+/*
+ * 판정별 건수. 한 번의 목록 응답으로는 알 수 없어 상태별로 따로 센다 —
+ * `size=1`로 던지고 봉투의 `total`만 읽는다. 지금 화면에 올라온 20건으로 세면
+ * 페이지를 넘길 때마다 숫자가 바뀌어 통계가 아니게 된다.
+ */
+const tally = ref({ ALLOWED: null, MASKED: null, BLOCKED: null, PENDING_REVIEW: null })
+
+const TALLY_CARDS = [
+  { status: 'ALLOWED', label: '허용', token: 'green' },
+  { status: 'MASKED', label: '마스킹', token: 'amber' },
+  { status: 'BLOCKED', label: '차단', token: 'red' },
+  { status: 'PENDING_REVIEW', label: '검토 대기', token: 'purple' },
+]
+
+async function loadTally() {
+  const base = { size: 1, page: 0 }
+  if (filters.value.deptId) base.deptId = filters.value.deptId
+  if (filters.value.from) base.from = startOfDayIso(filters.value.from)
+  if (filters.value.to) base.to = exclusiveEndIso(filters.value.to)
+  const results = await Promise.all(
+    TALLY_CARDS.map((c) =>
+      fetchInspections({ ...base, status: c.status })
+        .then((r) => r.total)
+        .catch(() => null),
+    ),
+  )
+  const next = {}
+  TALLY_CARDS.forEach((c, i) => (next[c.status] = results[i]))
+  tally.value = next
+}
+
+/** 빠른 기간. from/to를 직접 고르지 않고도 훑을 수 있게 한다 */
+const RANGES = [
+  { id: 'today', label: '오늘', days: 0 },
+  { id: 'week', label: '최근 7일', days: 6 },
+  { id: 'month', label: '최근 30일', days: 29 },
+]
+const activeRange = ref('month')
+
+function applyRange(range) {
+  const today = new Date()
+  const from = new Date(today)
+  from.setUTCDate(from.getUTCDate() - range.days)
+  filters.value.from = isoDay(from)
+  filters.value.to = isoDay(today)
+  activeRange.value = range.id
+  loadList(true)
+}
+
+function onStatusCard(status) {
+  filters.value.status = filters.value.status === status ? '' : status
+  loadList(true)
+}
+
 /* ── 기간 필터 ────────────────────────────────────────────────
  * API의 `to`는 미만(exclusive)이다 (계약서 §1-6). 화면의 종료일은 포함으로 다루므로
  * 질의 시 하루를 더해 넘긴다. 시각 표기·필터 모두 UTC 기준으로 통일한다.
@@ -75,6 +129,7 @@ function formatTime(iso) {
 }
 
 async function loadList(resetPage = false) {
+  loadTally()
   if (resetPage) page.value = 0
   listLoading.value = true
   listError.value = ''
@@ -147,6 +202,18 @@ const aiFindings = computed(() =>
 )
 
 /** 화면 명세 3.5-3 — 모든 AI 후보 처리가 끝나면 최종 판정 배지를 상단에 표시한다 */
+/** 스냅샷의 정책 버전을 한 줄로. 판정 시점의 근거가 무엇이었는지 칩 하나로 보인다 */
+const policyVersionText = computed(() => {
+  const list = detail.value?.policySnapshot?.policies ?? []
+  return list.length === 0 ? '—' : list.map((p) => `${p.code} v${p.version}`).join(' · ')
+})
+
+/*
+ * 확정은 보안 담당자만 한다 (0.5.1 D24). 백엔드가 403으로 막고 있고, 화면은 그것을
+ * 미리 보여줄 뿐이다. 버튼을 눌러야 막힌 걸 아는 것보다 낫다.
+ */
+const canReview = computed(() => session.currentUser?.role === 'SECURITY_ADMIN')
+
 const humanDecided = computed(
   () => Boolean(detail.value) && detail.value.decidedBy === 'HUMAN',
 )
@@ -229,7 +296,39 @@ onMounted(async () => {
 
 <template>
   <div class="audit">
+    <!-- 판정별 건수. 카드를 누르면 그 판정으로 목록이 좁혀진다 -->
+    <section class="tally">
+      <button
+        v-for="c in TALLY_CARDS"
+        :key="c.status"
+        type="button"
+        class="card"
+        :class="[`t-${c.token}`, { on: filters.status === c.status }]"
+        @click="onStatusCard(c.status)"
+      >
+        <span class="card-label">
+          <span class="dot" aria-hidden="true" />
+          {{ c.label }}
+        </span>
+        <span class="card-n">{{ tally[c.status] ?? '—' }}</span>
+        <span class="card-sub">건</span>
+      </button>
+    </section>
+
     <section class="filters">
+      <span class="ranges">
+        <button
+          v-for="r in RANGES"
+          :key="r.id"
+          type="button"
+          class="range"
+          :class="{ on: activeRange === r.id }"
+          @click="applyRange(r)"
+        >
+          {{ r.label }}
+        </button>
+      </span>
+
       <label>
         <span class="caption">부서</span>
         <!-- 정보보안팀은 검토자 역할만 하므로 필터에 넣지 않는다 (D2) -->
@@ -273,10 +372,10 @@ onMounted(async () => {
           <thead>
             <tr>
               <th>시각</th>
-              <th>부서</th>
-              <th>사용자</th>
+              <th>사용자 / 부서</th>
+              <th>마스킹 본문</th>
               <th>판정</th>
-              <th class="num">규칙 수</th>
+              <th class="num">규칙</th>
               <th>AI 상태</th>
               <th>확정</th>
             </tr>
@@ -296,9 +395,21 @@ onMounted(async () => {
                 :class="{ selected: row.inspectionId === selectedId }"
                 @click="loadDetail(row.inspectionId)"
               >
-                <td>{{ formatTime(row.createdAt) }}</td>
-                <td>{{ row.department }}</td>
-                <td>{{ row.userName }}</td>
+                <td class="time">{{ formatTime(row.createdAt) }}</td>
+                <td>
+                  <span class="who">
+                    <strong>{{ row.userName }}</strong>
+                    <em>{{ row.department }}</em>
+                  </span>
+                </td>
+                <!--
+                  마스킹본만 싣는다. 원문은 응답에 아예 없다 (5.4).
+                  규칙 BLOCK이면 마스킹본이 생성된 적이 없어 null이다 (D5·D14).
+                -->
+                <td class="excerpt">
+                  <span v-if="row.submittedText" class="excerpt-text">{{ row.submittedText }}</span>
+                  <span v-else class="excerpt-none">전송되지 않음</span>
+                </td>
                 <td><StatusBadge :value="row.status" /></td>
                 <td class="num">{{ row.ruleCount }}</td>
                 <td class="caption">{{ term(AI_STATUS_TERMS, row.aiStatus, '') }}</td>
@@ -333,13 +444,33 @@ onMounted(async () => {
               {{ detail.user.name }} · {{ detail.user.department }} ·
               {{ formatTime(detail.createdAt) }}
             </p>
+
+            <!--
+              한눈에 볼 메타. 값은 전부 응답에서 온다 — 규칙 ID는 finding의 code,
+              정책 버전은 policySnapshot, 판정 주체는 decidedBy다.
+              AI 신뢰도 같은 것은 없다. aiAssessment에 confidence를 두지 않은 것이
+              "AI는 결정하지 않는다"의 증거라, 화면에 만들어 넣으면 그 주장이 깨진다.
+            -->
+            <div class="chips">
+              <span v-for="f in ruleFindings" :key="f.findingId" class="chip">
+                <span class="chip-k">규칙 ID</span>{{ f.code }}
+              </span>
+              <span class="chip">
+                <span class="chip-k">정책 버전</span>{{ policyVersionText }}
+              </span>
+              <span class="chip">
+                <span class="chip-k">판정 주체</span
+                >{{ term(DECIDED_BY_TERMS, detail.decidedBy, '미확정') }}
+              </span>
+              <span class="chip"><span class="chip-k">부서</span>{{ detail.user.department }}</span>
+            </div>
           </header>
 
           <p v-if="notice" class="notice">{{ notice }}</p>
 
           <!-- 1. 원문 — 마스킹본만. 원문(original_text)은 응답에 없고 표시하지도 않는다 -->
           <section class="section">
-            <h3 class="section-title">원문 (마스킹 적용본)</h3>
+            <h3 class="section-title">마스킹 본문 · 원문은 표시하지 않습니다</h3>
             <p v-if="detail.submittedText === null" class="empty caption">
               차단되어 전송 본문이 저장되지 않았습니다.
             </p>
@@ -393,10 +524,16 @@ onMounted(async () => {
               v-else
               :findings="aiFindings"
               :assessment="detail.aiAssessment"
-              :readonly="false"
+              :readonly="!canReview"
               :busy-finding-id="busyFindingId"
               @review="onReview"
             />
+
+            <!-- 왜 버튼이 없는지 말해준다. 안 보이면 고장으로 읽힌다 -->
+            <p v-if="!canReview" class="role-note">
+              확정은 <strong>보안 담당자</strong>만 할 수 있습니다. 좌하단에서
+              박OO · 정보보안팀으로 전환하십시오.
+            </p>
           </section>
 
           <!-- 4. 이력 -->
@@ -436,18 +573,23 @@ onMounted(async () => {
 
 <style scoped>
 .audit {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 28px 28px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .filters {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--card);
 }
 
@@ -721,4 +863,185 @@ th {
   background: var(--card);
   font-size: var(--font-caption);
 }
+.tally {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--gray);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+}
+
+.card.on {
+  background: var(--card);
+  border-color: var(--border-strong);
+}
+
+.card-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.card .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.card-n {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-sub {
+  font-size: 12.5px;
+  color: var(--gray);
+}
+
+.t-green {
+  border-top-color: var(--green);
+  color: var(--green);
+}
+
+.t-amber {
+  border-top-color: var(--amber);
+  color: var(--amber);
+}
+
+.t-red {
+  border-top-color: var(--red);
+  color: var(--red);
+}
+
+.t-purple {
+  border-top-color: var(--purple);
+  color: var(--purple);
+}
+
+.ranges {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.range {
+  padding: 7px 13px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--gray);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.range:last-child {
+  border-right: 0;
+}
+
+.range.on {
+  background: var(--navy);
+  color: #fff;
+  font-weight: 600;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.who strong {
+  font-size: 14px;
+  color: var(--navy);
+}
+
+.who em {
+  font-style: normal;
+  font-size: 12.5px;
+  color: var(--gray);
+}
+
+.time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--gray);
+}
+
+.excerpt {
+  max-width: 0;
+  width: 40%;
+}
+
+.excerpt-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--navy);
+}
+
+.excerpt-none {
+  color: var(--gray);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  font-size: 12.5px;
+  color: var(--navy);
+}
+
+.chip-k {
+  color: var(--gray);
+  font-size: 11.5px;
+}
+
+.role-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--purple);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--gray);
+}
+
 </style>

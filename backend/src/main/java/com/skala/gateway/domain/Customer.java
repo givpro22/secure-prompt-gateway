@@ -40,6 +40,13 @@ public class Customer {
     @Column(name = "source", length = 100)
     private String source;
 
+    /**
+     * 이름 단독 탐지 대상 여부 (0.5.1 D23). 일반 명사와 겹치는 이름을 뺀다 —
+     * `재현`은 재현성, `인체`는 人體다. 전체 이름 마스킹과는 무관하다.
+     */
+    @Column(name = "given_name_detectable", nullable = false)
+    private Boolean givenNameDetectable = Boolean.TRUE;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = Boolean.TRUE;
 
@@ -59,6 +66,10 @@ public class Customer {
 
     public String getGivenName() {
         return givenName;
+    }
+
+    public Boolean getGivenNameDetectable() {
+        return givenNameDetectable;
     }
 
     public String getCompany() {

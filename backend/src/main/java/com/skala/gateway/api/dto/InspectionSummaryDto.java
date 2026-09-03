@@ -24,7 +24,14 @@ public record InspectionSummaryDto(
         MessageStatus status,
         long ruleCount,
         AiStatus aiStatus,
-        DecidedBy decidedBy) {
+        DecidedBy decidedBy,
+        /**
+         * 마스킹 적용본. 감사 목록이 훑어볼 대상은 이것이다 (기획서 5.4 —
+         * "원문 — submitted_text (마스킹된 본문). 원문(original_text)은 표시하지 않음").
+         *
+         * <p>규칙 BLOCK이면 {@code null}이다. 마스킹본이 생성된 적이 없다 (0.5 D5·D14).
+         */
+        String submittedText) {
 
     public static InspectionSummaryDto of(Inspection inspection, long ruleCount) {
         Message message = inspection.getMessage();
@@ -36,6 +43,7 @@ public record InspectionSummaryDto(
                 message.getStatus(),
                 ruleCount,
                 inspection.getAiStatus(),
-                inspection.getDecidedBy());
+                inspection.getDecidedBy(),
+                message.getSubmittedText());
     }
 }

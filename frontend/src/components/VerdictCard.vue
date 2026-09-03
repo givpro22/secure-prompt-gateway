@@ -74,15 +74,30 @@ const changedText = computed(() => {
   return sent
 })
 
+/*
+ * 상용 LLM은 게이트웨이가 대신 호출하지 않는다 (기획서 0.3 — 실제 LLM 호출은 범위 밖).
+ * 서버가 API 키로 부르는 것이 아니라, 승인된 본문을 그 서비스의 입력창까지 실어
+ * 보내고 나머지는 사람이 한다.
+ *
+ * `prefill`이 있는 서비스는 주소 쿼리로 본문을 넘긴다. ChatGPT는 그대로 전송까지
+ * 가고 Claude는 입력창에 채워진다. Gemini와 Grok은 같은 용도의 파라미터를 공개하지
+ * 않아 클립보드로만 넘긴다.
+ *
+ * 대가가 있다. 본문이 주소창에 실리므로 브라우저 기록과 리퍼러에 한 번 더 남는다.
+ * 게이트웨이가 승인한 본문이고 목적지도 어차피 그 서비스지만, 통제한 경로 밖에
+ * 사본이 하나 더 생기는 것은 맞다. 클립보드 복사는 그대로 하므로 이 경로가 막힌
+ * 환경에서도 붙여넣을 수 있다.
+ */
 const EXTERNAL_LLMS = [
-  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/' },
-  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new' },
+  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', prefill: 'q' },
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', prefill: 'q' },
   { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app' },
   { id: 'grok', name: 'Grok', url: 'https://grok.com/' },
 ]
 
 const copied = ref(false)
 const targetId = ref(EXTERNAL_LLMS[0].id)
+const selectedLlm = computed(() => EXTERNAL_LLMS.find((l) => l.id === targetId.value))
 
 async function sendToSelected() {
   const text = approvedText.value
@@ -96,7 +111,10 @@ async function sendToSelected() {
     // 클립보드가 막힌 환경(비 HTTPS 등)에서도 창은 열어준다. 사용자가 직접 복사한다.
     copied.value = false
   }
-  window.open(target.url, '_blank', 'noopener,noreferrer')
+  const url = target.prefill
+    ? `${target.url}?${target.prefill}=${encodeURIComponent(text)}`
+    : target.url
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 const isAllow = computed(() => props.verdict.decision === 'ALLOW')
@@ -179,7 +197,9 @@ const summary = computed(() => {
       </span>
       <span class="egress-actions">
         <LlmPicker v-model="targetId" :options="EXTERNAL_LLMS" />
-        <button type="button" class="egress-btn" @click="sendToSelected">프롬프트 입력</button>
+        <button type="button" class="egress-btn" @click="sendToSelected">
+          {{ selectedLlm?.prefill ? '바로 전송' : '복사 후 열기' }}
+        </button>
       </span>
     </div>
   </section>
@@ -187,11 +207,11 @@ const summary = computed(() => {
 
 <style scoped>
 .verdict {
-  margin-top: 8px;
-  padding: 12px 14px;
+  margin-top: 10px;
+  padding: 16px 18px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--gray);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--card);
 }
 
@@ -217,6 +237,7 @@ const summary = computed(() => {
 
 .rule-count {
   font-weight: 700;
+  font-size: 15px;
 }
 
 .summary {
@@ -234,11 +255,11 @@ const summary = computed(() => {
 .rule {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  padding: 7px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
-  font-size: var(--font-caption);
+  font-size: 14px;
 }
 
 .code {
@@ -355,7 +376,7 @@ const summary = computed(() => {
 }
 
 .egress-btn {
-  border-radius: 999px;
+  border-radius: 5px;
   padding: 5px 13px;
   border: 0;
   background: var(--navy);

@@ -95,7 +95,7 @@ onBeforeUnmount(() => {
 .trigger {
   padding: 4px 9px 4px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: 5px;
   background: #fff;
 }
 

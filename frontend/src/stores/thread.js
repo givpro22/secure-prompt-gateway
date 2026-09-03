@@ -30,6 +30,15 @@ export const useThreadStore = defineStore('thread', {
      */
     pendingDemo: null,
     /**
+     * 지금 화면에 떠 있는 것. 'own'이면 내가 입력한 대화, 아니면 열어 본 데모의 키다.
+     *
+     * "이번 세션"은 이 값과 무관하게 남는다. 데모를 열어 보는 동안에도 내가 이번에 한
+     * 일은 사라지지 않으며, 그 항목을 누르면 내 대화로 돌아온다.
+     */
+    viewing: 'own',
+    /** 내 대화로 돌아가라는 신호. 증가하면 ChatView가 치워 둔 대화를 되돌린다 */
+    resumeAt: 0,
+    /**
      * 전송하지 않고 남아 있는 입력. 사이드바 "작성 중"에 뜬다.
      * 새로고침하면 사라진다 — 검사 전 원문을 브라우저 저장소에 남기는 것은 이 서비스가
      * 막으려는 것과 같은 종류의 위험이다.
@@ -56,14 +65,18 @@ export const useThreadStore = defineStore('thread', {
         this.current.decision = decision
       }
     },
-    startSession() {
-      this.current = null
+    /** 내 대화로 돌아온다. 데모를 보다가 입력해도 이 경로를 탄다 */
+    resumeOwn() {
+      if (this.viewing === 'own') return
+      this.viewing = 'own'
+      this.resumeAt += 1
     },
     requestDraft(text) {
       this.pendingDraft = { text, at: Date.now() }
     },
-    openDemo(prompts) {
-      this.pendingDemo = { prompts, at: Date.now() }
+    openDemo(key, prompts, answers = []) {
+      this.viewing = key
+      this.pendingDemo = { key, prompts, answers, at: Date.now() }
     },
     setWriting(text) {
       const trimmed = (text ?? '').trim()
@@ -72,6 +85,7 @@ export const useThreadStore = defineStore('thread', {
     clear() {
       this.current = null
       this.writing = null
+      this.viewing = 'own'
       this.clearedAt += 1
     },
   },

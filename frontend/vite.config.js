@@ -1,25 +1,25 @@
-import { readdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
 import { fixtureServer } from './dev/fixture-server.js'
 
 /*
- * 정책 세트 리비전 = 적용된 Flyway 마이그레이션 개수.
+ * 정책 버전 = git 커밋. 화면의 버전으로 저장소의 그 시점을 바로 찾을 수 있어야 한다.
  *
- * 정책·규칙이 바뀔 때마다 마이그레이션이 하나씩 늘고 그것이 커밋 하나다. 그래서 이
- * 숫자는 우리 커밋 이력을 그대로 따라간다. 손으로 올리는 값이 아니라 세는 값이라
- * 올리는 걸 잊을 수가 없다.
+ * 커밋 수를 번호로, 짧은 해시를 좌표로 쓴다. `v31 · fad986f`처럼 나온다.
  *
- * `policy.version`(P-PII v5 같은 것)과 다른 축이다. 저건 정책 하나의 개정 횟수이고
- * 판정 스냅샷 대조에 쓰이며, 이건 정책 세트 전체가 몇 번 바뀌었는가다.
+ * 마이그레이션 개수(V1~V5)로 세던 것을 바꾼 것이다. 그쪽이 "정책이 몇 번 바뀌었나"에는
+ * 더 정확하지만, 화면에서 본 값으로 커밋을 찾을 수는 없었다. 대신 이제 정책과 무관한
+ * 커밋에도 번호가 오른다 — 읽는 사람에게는 정책 개정 횟수가 아니라 빌드 시점이다.
+ *
+ * git이 없는 환경(배포 이미지 등)에서는 빈 값이 되고 화면은 그 줄을 숨긴다.
  */
-function policyRevision() {
+function gitVersion() {
+  const run = (args) => execFileSync('git', args, { cwd: __dirname, encoding: 'utf8' }).trim()
   try {
-    const dir = resolve(__dirname, '../backend/src/main/resources/db/migration')
-    return readdirSync(dir).filter((f) => /^V\d+__.*\.sql$/.test(f)).length
+    return { count: Number(run(['rev-list', '--count', 'HEAD'])), sha: run(['rev-parse', '--short', 'HEAD']) }
   } catch {
-    return 0
+    return { count: 0, sha: '' }
   }
 }
 
@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins,
     define: {
-      __POLICY_REVISION__: JSON.stringify(policyRevision()),
+      __GIT_VERSION__: JSON.stringify(gitVersion()),
     },
   }
 })

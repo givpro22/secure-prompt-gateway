@@ -106,6 +106,19 @@ public class ApiException extends RuntimeException {
      * <p>규칙 판정은 사람이 번복하지 않는다 (기획서 4장). 사람이 확정하는 것은 AI 후보뿐이며,
      * 그 경계가 이 프로젝트의 핵심 설계 주장이다.
      */
+    /**
+     * 확정은 보안 담당자만 한다 (0.5.1 D24).
+     *
+     * <p>인증은 여전히 없다 — {@code X-User-Id}가 누구인지 말할 뿐 그 사람임을 증명하지
+     * 않는다. 그럼에도 역할을 확인하는 이유는, "AI는 제안하고 사람이 확정한다"에서
+     * 사람이 <b>아무나</b>가 아니기 때문이다. 화면에서만 버튼을 가리면 그 경계가 주장에
+     * 그친다.
+     */
+    public static ApiException notReviewer(Object userId) {
+        return new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN_ROLE",
+                "확정은 보안 담당자만 할 수 있습니다. 사용자 " + userId + "는 SECURITY_ADMIN이 아닙니다.");
+    }
+
     public static ApiException ruleFindingNotReviewable(Object findingId) {
         return new ApiException(HttpStatus.CONFLICT, "RULE_FINDING_NOT_REVIEWABLE",
                 "finding " + findingId + "는 규칙 판정이라 사람이 확정하지 않습니다.");
