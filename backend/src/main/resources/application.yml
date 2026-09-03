@@ -58,7 +58,7 @@ answer:
   endpoint: ${ANSWER_ENDPOINT:}
   api-key: ${ANSWER_API_KEY:${ANTHROPIC_API_KEY:}}
   # openai 제공자는 쉼표로 여러 개를 줄 수 있다. 앞이 과부하·할당량이면 다음으로 넘어간다.
-  #   예) ANSWER_MODEL=gemini-3.6-flash,gemini-3.7-flash,gemini-flash-latest
+  #   예) ANSWER_MODEL=gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash
   model: ${ANSWER_MODEL:claude-opus-5}
   # Gemini 3.x 같은 생각(thinking) 모델은 OpenAI 호환 경로에서 생각 토큰까지 이 상한에
   # 넣는다. 200으로 시험했더니 답이 한 어절에서 끊겼다. 4096이면 넉넉하고, 실제로 짧게
