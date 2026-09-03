@@ -9,3 +9,14 @@ import client from './client'
 export function submitMessage(text) {
   return client.post('/messages', { text })
 }
+
+/*
+ * POST /messages/{id}/response — 출력 검사 (UC-08).
+ *
+ * 모델이 돌려준 답변을 같은 정책으로 다시 본다. 입력과 같은 파이프라인이라 상태
+ * 코드도 같다 — 200 ALLOW·MASK / 202 REVIEW / 403 BLOCK. 403도 인터셉터가 정상
+ * 경로로 돌려놓으므로 호출자가 `res.status`를 본다.
+ */
+export function submitResponse(messageId, text) {
+  return client.post(`/messages/${messageId}/response`, { text })
+}

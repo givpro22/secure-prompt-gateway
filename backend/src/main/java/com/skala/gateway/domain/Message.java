@@ -48,6 +48,17 @@ public class Message {
     @Column(name = "status", nullable = false, length = 20)
     private MessageStatus status;
 
+    /**
+     * 모델이 돌려준 답변 원문 (UC-08). 원문 미노출 원칙은 여기에도 걸린다 —
+     * 감사 보관용이며 응답에 싣지 않는다.
+     */
+    @Column(name = "response_text", columnDefinition = "text")
+    private String responseText;
+
+    /** 출력 검사를 거쳐 직원 화면에 그려지는 본문. 차단이면 {@code null}이다 */
+    @Column(name = "response_masked", columnDefinition = "text")
+    private String responseMasked;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -86,6 +97,20 @@ public class Message {
 
     public void setSubmittedText(String submittedText) {
         this.submittedText = submittedText;
+    }
+
+    public String getResponseText() {
+        return responseText;
+    }
+
+    public String getResponseMasked() {
+        return responseMasked;
+    }
+
+    /** 출력 검사 결과를 함께 기록한다. 차단이면 {@code masked}가 null이다 */
+    public void recordResponse(String text, String masked) {
+        this.responseText = text;
+        this.responseMasked = masked;
     }
 
     public MessageStatus getStatus() {

@@ -3,6 +3,9 @@ package com.skala.gateway.api;
 import com.skala.gateway.api.dto.ErrorResponse;
 import com.skala.gateway.api.dto.MessageRequest;
 import com.skala.gateway.api.dto.MessageVerdictResponse;
+import com.skala.gateway.api.dto.ResponseInspectionRequest;
+import com.skala.gateway.api.dto.ResponseVerdictResponse;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.skala.gateway.config.CurrentUserId;
 import com.skala.gateway.domain.repository.AppUserRepository;
 import com.skala.gateway.service.InspectionService;
@@ -80,6 +83,32 @@ public class MessageController {
                     .location(URI.create("/api/v1/inspections/" + verdict.inspectionId()))
                     .body(verdict);
             case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
+        };
+    }
+    /**
+     * {@code POST /api/v1/messages/{id}/response} — 출력 검사 (UC-08).
+     *
+     * <p>모델이 돌려준 답변을 같은 정책으로 다시 본다. 입력과 같은 파이프라인이라
+     * 상태 코드도 같다 — 200 ALLOW·MASK / 202 REVIEW / 403 BLOCK.
+     */
+    @PostMapping("/messages/{id}/response")
+    public ResponseEntity<ResponseVerdictResponse> inspectResponse(
+            @PathVariable("id") Long messageId,
+            @CurrentUserId Long userId,
+            @RequestBody(required = false) ResponseInspectionRequest request) {
+        String text = request == null || request.text() == null ? "" : request.text();
+        if (text.trim().isEmpty()) {
+            throw ApiException.invalidRequest("검사할 답변이 비어 있습니다.");
+        }
+        if (text.length() > maxInputChars) {
+            throw ApiException.invalidRequest(
+                    "답변이 최대 길이를 초과했습니다. (" + text.length() + "자 / 최대 " + maxInputChars + "자)");
+        }
+        ResponseVerdictResponse verdict = inspectionService.inspectResponse(messageId, userId, text);
+        return switch (verdict.decision()) {
+            case BLOCK -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(verdict);
+            case PENDING -> ResponseEntity.accepted().body(verdict);
+            default -> ResponseEntity.ok(verdict);
         };
     }
 }

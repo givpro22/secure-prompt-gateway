@@ -156,6 +156,17 @@ public class ApiException extends RuntimeException {
                 "해제 요청 " + requestId + "를 찾을 수 없습니다.");
     }
 
+    /** 출력 검사는 나간 적 있는 프롬프트에만 붙는다. 차단된 건은 애초에 답변이 없다 */
+    public static ApiException notSent(Object messageId) {
+        return new ApiException(HttpStatus.CONFLICT, "NOT_SENT",
+                "message " + messageId + "는 전송되지 않아 검사할 답변이 없습니다.");
+    }
+
+    public static ApiException responseAlreadyInspected(Object messageId) {
+        return new ApiException(HttpStatus.CONFLICT, "RESPONSE_ALREADY_INSPECTED",
+                "message " + messageId + "의 답변은 이미 검사했습니다.");
+    }
+
     public static ApiException unmaskAlreadyDecided(Object requestId, Object current) {
         return new ApiException(HttpStatus.CONFLICT, "UNMASK_ALREADY_DECIDED",
                 "해제 요청 " + requestId + "는 이미 " + current + "로 확정되었습니다.");

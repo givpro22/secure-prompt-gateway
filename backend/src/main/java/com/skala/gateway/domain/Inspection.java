@@ -89,6 +89,14 @@ public class Inspection {
 
     public Inspection(Message message, PolicySnapshot policySnapshot, RuleResult ruleResult,
                       AiStatus aiStatus, FinalDecision finalDecision, DecidedBy decidedBy) {
+        this(message, InspectionPhase.INPUT, policySnapshot, ruleResult, aiStatus, finalDecision, decidedBy);
+    }
+
+    /** 출력 검사(UC-08)는 {@code phase=OUTPUT}으로 같은 메시지에 한 건 더 붙는다 */
+    public Inspection(Message message, InspectionPhase phase, PolicySnapshot policySnapshot,
+                      RuleResult ruleResult, AiStatus aiStatus, FinalDecision finalDecision,
+                      DecidedBy decidedBy) {
+        this.phase = phase;
         this.message = message;
         this.policySnapshot = policySnapshot;
         this.ruleResult = ruleResult;
