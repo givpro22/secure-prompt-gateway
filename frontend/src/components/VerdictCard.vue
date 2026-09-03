@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import LlmPicker from './LlmPicker.vue'
 import StatusBadge from './StatusBadge.vue'
 import { ACTION_TERMS, CATEGORY_TERMS, OBLIGATION_TERMS, term } from '../lib/terms'
 import { expectField } from '../lib/contract'
@@ -143,29 +144,24 @@ const summary = computed(() => {
       탐지된 개인정보를 라벨로 치환한 본문만 전송되었습니다. 위 발화에 표시된 노란 라벨이 치환 구간입니다.
     </p>
 
-    <!--
-      승인된 본문만 밖으로 나갈 수 있다. 차단·검토 대기에는 이 줄이 뜨지 않는다.
-    -->
-    <div v-if="approvedText" class="egress">
-      <span class="egress-label">
-        이 본문은 전송이 승인되었습니다{{ isMask ? ' (마스킹 적용본)' : '' }}.
-      </span>
-      <span class="egress-actions">
-        <label class="sr-only" :for="`llm-${verdict.inspectionId}`">전송할 서비스</label>
-        <select :id="`llm-${verdict.inspectionId}`" v-model="targetId" class="egress-select">
-          <option v-for="llm in EXTERNAL_LLMS" :key="llm.id" :value="llm.id">{{ llm.name }}</option>
-        </select>
-        <button type="button" class="egress-btn" @click="sendToSelected">프롬프트 입력</button>
-      </span>
-      <span v-if="copied" class="copied" role="status">승인 본문을 복사했습니다</span>
-    </div>
-
     <footer v-if="policies.length > 0" class="policies caption">
       적용 정책
       <span v-for="policy in policies" :key="policy.policyId" class="policy">
         {{ policy.code }} v{{ policy.version }}
       </span>
     </footer>
+
+    <!-- 승인된 본문만 밖으로 나갈 수 있다. 차단·검토 대기에는 이 줄이 뜨지 않는다 -->
+    <div v-if="approvedText" class="egress">
+      <span class="egress-label">
+        전송 승인됨{{ isMask ? ' · 마스킹 적용본' : '' }}
+        <span v-if="copied" class="copied" role="status">— 복사했습니다</span>
+      </span>
+      <span class="egress-actions">
+        <LlmPicker v-model="targetId" :options="EXTERNAL_LLMS" />
+        <button type="button" class="egress-btn" @click="sendToSelected">프롬프트 입력</button>
+      </span>
+    </div>
   </section>
 </template>
 
@@ -294,9 +290,10 @@ const summary = computed(() => {
 .egress {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 12px;
+  margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
   font-size: var(--font-caption);
@@ -308,30 +305,14 @@ const summary = computed(() => {
 
 .egress-actions {
   display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.egress-select {
-  border: 0;
-  border-right: 1px solid var(--border);
-  padding: 4px 8px 4px 11px;
-  background: #fff;
-  color: var(--navy);
-  font: inherit;
-  font-size: 11.5px;
-}
-
-.egress-select:focus {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .egress-btn {
-  padding: 4px 12px;
+  border-radius: 999px;
+  padding: 5px 13px;
   border: 0;
   background: var(--navy);
   color: #fff;

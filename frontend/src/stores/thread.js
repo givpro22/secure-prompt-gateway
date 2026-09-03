@@ -1,17 +1,22 @@
 import { defineStore } from 'pinia'
 
 /*
- * 사이드바가 읽는 대화 요약.
+ * 사이드바가 읽는 지금 대화.
  *
  * **저장하지 않는다.** 세션·대화 영속화는 범위 밖이라(기획서 0.3) 새로고침하면 사라진다.
- * 시안의 "오늘 / 어제" 이력은 그래서 만들 수 없다 — 없는 데이터를 그린 목록은 시연 중에
- * 눌리고, 눌러도 아무것도 안 열린다.
+ * 시안의 "오늘 / 어제" 이력을 만들 수 없는 이유이고, 데모 항목에 (demo)를 붙인 이유다.
  *
- * 대신 이번 세션에 실제로 보낸 것만 담는다. 화면에 이미 있는 것이라 클릭하면 그 자리로 간다.
+ * 항목이 하나인 것은 의도다. 턴마다 줄이 늘면 사이드바가 대화 목록이 아니라 발화
+ * 목록이 되어, 옆의 (demo) 대화들과 단위가 어긋난다. 지금 열려 있는 대화 하나만 둔다.
  */
+
+/** 판정 심각도. 대화 전체를 대표하는 값은 가장 심한 것이다 */
+const SEVERITY = { ALLOW: 0, ALLOWED: 0, MASK: 1, MASKED: 1, PENDING: 2, PENDING_REVIEW: 2, BLOCK: 3, BLOCKED: 3 }
+
 export const useThreadStore = defineStore('thread', {
   state: () => ({
-    items: [],
+    /** 지금 열려 있는 대화 하나. { title, decision, turns } */
+    current: null,
     /** ChatView가 감시하는 초기화 신호. 증가하면 대화를 비운다 */
     clearedAt: 0,
     /** 사이드바에서 고른 문장을 입력창으로 옮기는 통로. 전송은 하지 않는다 */
@@ -26,18 +31,33 @@ export const useThreadStore = defineStore('thread', {
     pendingDemo: null,
     /**
      * 전송하지 않고 남아 있는 입력. 사이드바 "작성 중"에 뜬다.
-     * 새로고침하면 사라진다 — 영속화는 범위 밖이고(0.3), 검사 전 원문을 브라우저
-     * 저장소에 남기는 것은 이 서비스가 막으려는 것과 같은 종류의 위험이다.
+     * 새로고침하면 사라진다 — 검사 전 원문을 브라우저 저장소에 남기는 것은 이 서비스가
+     * 막으려는 것과 같은 종류의 위험이다.
      */
     writing: null,
   }),
   actions: {
-    push(item) {
-      this.items.unshift(item)
+    /** 대화의 첫 발화가 제목이 된다. 이후 턴은 심각도와 턴 수만 올린다 */
+    addTurn(text, decision) {
+      const title = text.length > 24 ? `${text.slice(0, 24)}…` : text
+      if (!this.current) {
+        this.current = { title, decision, turns: 1 }
+        return
+      }
+      this.current.turns += 1
+      if ((SEVERITY[decision] ?? 0) > (SEVERITY[this.current.decision] ?? 0)) {
+        this.current.decision = decision
+      }
     },
-    updateDecision(key, decision) {
-      const found = this.items.find((i) => i.key === key)
-      if (found) found.decision = decision
+    /** 담당자 확정 등으로 판정이 바뀌었을 때 */
+    raiseDecision(decision) {
+      if (!this.current) return
+      if ((SEVERITY[decision] ?? 0) > (SEVERITY[this.current.decision] ?? 0)) {
+        this.current.decision = decision
+      }
+    },
+    startSession() {
+      this.current = null
     },
     requestDraft(text) {
       this.pendingDraft = { text, at: Date.now() }
@@ -50,7 +70,7 @@ export const useThreadStore = defineStore('thread', {
       this.writing = trimmed.length === 0 ? null : { text: trimmed }
     },
     clear() {
-      this.items = []
+      this.current = null
       this.writing = null
       this.clearedAt += 1
     },

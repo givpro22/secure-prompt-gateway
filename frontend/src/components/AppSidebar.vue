@@ -112,14 +112,6 @@ function newChat() {
   if (router.currentRoute.value.name !== 'chat') router.push('/chat')
 }
 
-function goTo(key) {
-  if (router.currentRoute.value.name !== 'chat') {
-    router.push('/chat')
-    return
-  }
-  document.getElementById(`turn-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
-
 function token(decision) {
   return STATUS_TERMS[decision]?.token ?? 'gray'
 }
@@ -143,14 +135,15 @@ function token(decision) {
     </nav>
 
     <div class="scroll">
-      <section v-if="thread.items.length > 0" class="history">
+      <section v-if="thread.current" class="history">
         <h2>이번 세션</h2>
         <ul>
-          <li v-for="item in thread.items" :key="item.key">
-            <button type="button" class="history-item" @click="goTo(item.key)">
-              <span class="dot" :class="`t-${token(item.decision)}`" aria-hidden="true" />
-              <span class="text">{{ item.text }}</span>
-            </button>
+          <li>
+            <span class="history-item current">
+              <span class="dot" :class="`t-${token(thread.current.decision)}`" aria-hidden="true" />
+              <span class="text">{{ thread.current.title }}</span>
+              <span v-if="thread.current.turns > 1" class="turns">{{ thread.current.turns }}턴</span>
+            </span>
           </li>
         </ul>
       </section>
@@ -330,6 +323,12 @@ function token(decision) {
   font: inherit;
   font-size: 12.5px;
   text-align: left;
+}
+
+.history-item.current {
+  background: var(--nav-bg-soft);
+  color: var(--nav-fg);
+  cursor: default;
 }
 
 .history-item:hover {

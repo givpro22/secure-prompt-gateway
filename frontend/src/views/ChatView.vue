@@ -82,7 +82,7 @@ watch(
     if (!demo || replaying.value) return
     replaying.value = true
     entries.value = []
-    thread.items = []
+    thread.startSession()
     banner.value = ''
     try {
       for (const prompt of demo.prompts) {
@@ -153,11 +153,7 @@ async function send() {
 
     // 보냈으니 더 이상 작성 중이 아니다.
     thread.setWriting(null)
-    thread.push({
-      key: entry.key,
-      text: text.length > 26 ? `${text.slice(0, 26)}…` : text,
-      decision: verdict.decision,
-    })
+    thread.addTurn(text, verdict.decision)
 
     if (verdict.decision === 'PENDING') startPolling(entry)
   } catch (err) {
@@ -207,8 +203,8 @@ function startPolling(entry) {
 }
 
 function applyInspection(entry, inspection) {
-  // 사이드바 점 색도 최종 판정을 따라간다.
-  if (inspection?.status) thread.updateDecision(entry.key, inspection.status)
+  // 담당자가 확정하면 대화 전체의 대표 판정도 따라 올라간다.
+  if (inspection?.status) thread.raiseDecision(inspection.status)
   entry.inspection = inspection
   entry.aiStatus = inspection.aiStatus
 }
