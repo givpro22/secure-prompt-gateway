@@ -331,4 +331,22 @@ class ReviewApiTest {
     private JsonNode json(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8));
     }
+
+    @Test
+    @DisplayName("보안 담당자가 아니면 확정할 수 없다 — 403 FORBIDDEN_ROLE (0.5.1 D24)")
+    void onlySecurityAdminCanReview() throws Exception {
+        long inspectionId = pendingInspection(1);
+        Long findingId = aiFindingIds(inspectionId).get(0);
+
+        MvcResult result = mockMvc.perform(
+                        patch("/api/v1/inspections/{id}/findings/{findingId}",
+                                inspectionId, findingId)
+                                .header(WebConfig.USER_HEADER, DemoCases.USER_DEV)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"reviewStatus\":\"ACCEPTED\"}"))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(403);
+        assertThat(json(result).path("code").asText()).isEqualTo("FORBIDDEN_ROLE");
+    }
 }

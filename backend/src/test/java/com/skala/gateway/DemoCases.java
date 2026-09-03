@@ -49,6 +49,8 @@ public final class DemoCases {
     public static final long USER_DEV = 1L;
     public static final long USER_SALES = 2L;
     public static final long USER_HR = 3L;
+    /** 박OO · 정보보안팀. 확정은 이 계정만 할 수 있다 (0.5.1 D24) */
+    public static final long USER_ADMIN = 4L;
 
     public static final long DEPT_DEV = 1L;
     public static final long DEPT_SALES = 2L;

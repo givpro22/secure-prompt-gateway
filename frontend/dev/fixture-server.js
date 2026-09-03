@@ -651,6 +651,13 @@ export function fixtureServer() {
             if (!['ACCEPTED', 'REJECTED'].includes(body.reviewStatus)) {
               return fail(res, 400, 'INVALID_REQUEST', 'reviewStatus must be ACCEPTED or REJECTED')
             }
+            // 확정은 보안 담당자만 (0.5.1 D24). 백엔드와 같은 규칙이어야 픽스처 모드에서만
+            // 통과하는 조작이 생기지 않는다.
+            const actor = USERS.find((u) => u.userId === userId)
+            if (!actor || actor.role !== 'SECURITY_ADMIN') {
+              return fail(res, 403, 'FORBIDDEN_ROLE',
+                `확정은 보안 담당자만 할 수 있습니다. 사용자 ${userId}는 SECURITY_ADMIN이 아닙니다.`)
+            }
             if (finding.reviewStatus === 'CONFIRMED') {
               return fail(res, 409, 'RULE_FINDING_NOT_REVIEWABLE', `finding ${finding.findingId} is a rule decision`)
             }

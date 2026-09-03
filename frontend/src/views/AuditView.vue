@@ -208,6 +208,12 @@ const policyVersionText = computed(() => {
   return list.length === 0 ? '—' : list.map((p) => `${p.code} v${p.version}`).join(' · ')
 })
 
+/*
+ * 확정은 보안 담당자만 한다 (0.5.1 D24). 백엔드가 403으로 막고 있고, 화면은 그것을
+ * 미리 보여줄 뿐이다. 버튼을 눌러야 막힌 걸 아는 것보다 낫다.
+ */
+const canReview = computed(() => session.currentUser?.role === 'SECURITY_ADMIN')
+
 const humanDecided = computed(
   () => Boolean(detail.value) && detail.value.decidedBy === 'HUMAN',
 )
@@ -518,10 +524,16 @@ onMounted(async () => {
               v-else
               :findings="aiFindings"
               :assessment="detail.aiAssessment"
-              :readonly="false"
+              :readonly="!canReview"
               :busy-finding-id="busyFindingId"
               @review="onReview"
             />
+
+            <!-- 왜 버튼이 없는지 말해준다. 안 보이면 고장으로 읽힌다 -->
+            <p v-if="!canReview" class="role-note">
+              확정은 <strong>보안 담당자</strong>만 할 수 있습니다. 좌하단에서
+              박OO · 정보보안팀으로 전환하십시오.
+            </p>
           </section>
 
           <!-- 4. 이력 -->
@@ -1018,6 +1030,18 @@ th {
 .chip-k {
   color: var(--gray);
   font-size: 11.5px;
+}
+
+.role-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--purple);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--gray);
 }
 
 </style>
