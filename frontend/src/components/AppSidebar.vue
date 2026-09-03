@@ -24,6 +24,14 @@ const router = useRouter()
  * 대화 영속화는 범위 밖이라(0.3) 실제 지난 대화가 없다. 표시 없이 그려두면 화면에
  * 있는 것과 없는 것을 구분할 수 없고, 시연 중에 눌렀을 때 아무것도 안 열린다.
  * 눌리면 그 문장이 입력창에 들어가도록 해 죽은 목록이 되지 않게 했다.
+ *
+ * `answers`는 `prompts`와 자리를 맞춘 응답이다. **모델을 부른 결과가 아니라 미리 적어
+ * 둔 문장이다** (0.3 — 실제 LLM 호출은 범위 밖). 판정만 뜨고 답이 없으면 대화로
+ * 보이지 않아서 넣었다.
+ *
+ * 내용은 모델이 **마스킹된 본문만 봤다는 전제로** 썼다. 가려진 자리를 답변이 그대로
+ * 라벨로 되받는 것이 이 서비스가 하는 일을 가장 짧게 보여준다. 차단된 턴은 애초에
+ * 나가지 않았으므로 답이 없다 — `null`로 둔다.
  */
 const DEMO_HISTORY = [
   {
@@ -35,6 +43,9 @@ const DEMO_HISTORY = [
         decision: 'ALLOW',
         text: '고객 응대 이메일 문구',
         prompts: ['고객 응대 이메일 문구를 정중한 톤으로 다듬어줘.'],
+        answers: [
+          '아래 세 가지를 손봤습니다.\n\n1. "확인 부탁드립니다" → "확인해 주시면 감사하겠습니다"\n2. 사과 문장을 앞으로 옮기고 원인 설명을 뒤에 뒀습니다\n3. 맺음말에 회신 기한을 넣었습니다\n\n원문의 요구사항은 그대로 두고 어조만 바꿨습니다.',
+        ],
       },
       {
         key: 'd2',
@@ -43,6 +54,10 @@ const DEMO_HISTORY = [
         prompts: [
           '환불 요청 건 정리해줘. 담당자 연락처 010-1234-5678 포함해서.',
           '방금 정리한 내용을 표로 바꿔줘. 사유별로 묶어서.',
+        ],
+        answers: [
+          '환불 요청 건을 아래로 정리했습니다.\n\n· 접수 경로 — 고객센터 유선, 웹 문의\n· 처리 단계 — 접수 → 사유 확인 → 승인 → 환불 실행\n· 담당자 연락처 — [전화번호]\n\n연락처가 [전화번호]로 들어와 있어 그대로 뒀습니다. 실제 번호가 필요하면 사내 시스템에서 확인해 주세요.',
+          '사유별로 묶어 표로 옮겼습니다.\n\n| 사유 | 건수 | 평균 처리일 |\n| --- | --- | --- |\n| 단순 변심 | 12 | 2.1일 |\n| 배송 지연 | 7 | 3.4일 |\n| 상품 불량 | 5 | 4.8일 |\n\n상품 불량이 가장 오래 걸립니다. 검수 단계가 하나 더 있어서입니다.',
         ],
       },
       {
@@ -55,6 +70,11 @@ const DEMO_HISTORY = [
           '결제 오류 로그 좀 봐줘. DB_URL=postgres://admin:p%40ss@10.0.3.21/prod 붙이면 죽어.',
           '접속 문자열은 빼고 다시. 커넥션 타임아웃 오류 원인만 짚어줘.',
           '재시도 로직은 어떻게 잡는 게 좋아?',
+        ],
+        answers: [
+          null,
+          '커넥션 타임아웃이면 먼저 볼 곳은 세 군데입니다.\n\n1. 커넥션 풀 고갈 — 반납되지 않은 커넥션이 쌓이면 새 요청이 대기만 하다 끊깁니다\n2. 네트워크 경로 — 보안 그룹이나 방화벽이 특정 포트만 막고 있는 경우\n3. DB 쪽 max_connections 상한\n\n풀 사용률 그래프가 상한에 붙어 있는지부터 보시는 걸 권합니다. 대개 1번입니다.',
+          '지수 백오프에 지터를 얹는 방식이 무난합니다.\n\n· 초기 대기 200ms, 배수 2, 최대 3회\n· 매 회차에 ±20% 무작위를 더해 재시도가 한꺼번에 몰리지 않게\n· 타임아웃 자체는 재시도하되 인증 실패나 문법 오류는 즉시 포기\n\n재시도 상한을 넘기면 회로를 열어 두고 일정 시간 뒤에 반만 흘려보내는 편이 낫습니다.',
         ],
       },
     ],
@@ -71,12 +91,19 @@ const DEMO_HISTORY = [
           '담당자 김서준 고객님과 박예린 고객님께 안내 문자 보내줘.',
           '문자 대신 이메일 문구로 바꿔줘. 회신은 hong@example.com 으로.',
         ],
+        answers: [
+          '안내 문자 초안입니다.\n\n"[고객명] 고객님, 안녕하세요. 요청하신 건 처리 결과를 안내드립니다. 자세한 내용은 첨부를 확인해 주세요. 문의는 담당자에게 회신 주시면 됩니다."\n\n수신자 이름이 [고객명]으로 들어와 있어 자리만 잡아 뒀습니다. 발송 전에 실제 이름으로 채워 주세요.',
+          '이메일 문구로 옮겼습니다.\n\n제목: 요청하신 건 처리 결과 안내\n\n"[고객명] 고객님, 안녕하세요.\n요청하신 건의 처리 결과를 안내드립니다. 상세 내역은 아래 표를 확인해 주시고, 추가로 궁금한 점이 있으시면 [이메일] 로 회신 부탁드립니다."\n\n회신 주소도 [이메일] 로 가려져 있어 그대로 뒀습니다.',
+        ],
       },
       {
         key: 'd5',
         decision: 'ALLOW',
         text: 'FAQ 초안',
         prompts: ['자주 묻는 질문 FAQ 초안 10개만 뽑아줘.'],
+        answers: [
+          'FAQ 초안 10개입니다.\n\n1. 주문 취소는 언제까지 되나요\n2. 배송 조회는 어디서 하나요\n3. 환불은 며칠 걸리나요\n4. 교환과 반품의 차이가 뭔가요\n5. 영수증은 어떻게 받나요\n6. 회원 등급은 어떻게 올라가나요\n7. 쿠폰이 중복 적용되나요\n8. 비회원도 주문할 수 있나요\n9. 배송지는 언제까지 바꿀 수 있나요\n10. 재입고 알림은 어떻게 신청하나요\n\n답변은 각 항목 아래 3~4줄로 붙이는 것을 권합니다. 더 필요하시면 항목만 늘려 드리겠습니다.',
+        ],
       },
     ],
   },
@@ -93,7 +120,7 @@ const DEMO_DRAFT = {
  * 보이고, 누를수록 쌓이기만 한다.
  */
 function openDemo(item) {
-  thread.openDemo(item.prompts)
+  thread.openDemo(item.key, item.prompts, item.answers ?? [])
   if (router.currentRoute.value.name !== 'chat') router.push('/chat')
 }
 
@@ -137,11 +164,16 @@ function token(decision) {
         <h2>이번 세션</h2>
         <ul>
           <li>
-            <span class="history-item current">
+            <button
+              type="button"
+              class="history-item"
+              :class="{ current: thread.viewing === 'own' }"
+              @click="thread.resumeOwn()"
+            >
               <span class="dot" :class="`t-${token(thread.current.decision)}`" aria-hidden="true" />
               <span class="text">{{ thread.current.title }}</span>
               <span v-if="thread.current.turns > 1" class="turns">{{ thread.current.turns }}턴</span>
-            </span>
+            </button>
           </li>
         </ul>
       </section>
@@ -169,7 +201,12 @@ function token(decision) {
         <h2>{{ block.group }}</h2>
         <ul>
           <li v-for="item in block.items" :key="item.key">
-            <button type="button" class="history-item" @click="openDemo(item)">
+            <button
+              type="button"
+              class="history-item"
+              :class="{ current: thread.viewing === item.key }"
+              @click="openDemo(item)"
+            >
               <span class="dot" :class="`t-${token(item.decision)}`" aria-hidden="true" />
               <span class="text">{{ item.text }}</span>
               <span v-if="item.prompts.length > 1" class="turns">{{ item.prompts.length }}턴</span>
@@ -320,7 +357,6 @@ function token(decision) {
 .history-item.current {
   background: var(--nav-bg-soft);
   color: var(--nav-fg);
-  cursor: default;
 }
 
 .history-item:hover {

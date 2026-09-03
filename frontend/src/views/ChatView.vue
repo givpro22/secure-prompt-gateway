@@ -54,6 +54,8 @@ watch(
   () => thread.clearedAt,
   () => {
     entries.value = []
+    ownEntries.value = []
+    showingOwn.value = true
     draft.value = ''
     banner.value = ''
   },
@@ -76,21 +78,59 @@ watch(
  */
 const replaying = ref(false)
 
+/*
+ * 데모를 여는 동안 치워 두는 내 대화.
+ *
+ * 예전에는 데모를 누르면 "이번 세션"을 비웠다. 화면에 없는 것을 사이드바가 가리키지
+ * 않게 하려던 것인데, 남의 대화를 한 번 들여다봤다고 내가 이번에 한 일이 없어지는
+ * 것이 더 이상했다. 지금은 치워 뒀다가 되돌린다 — 데모는 읽고 나오는 자리다.
+ */
+const ownEntries = ref([])
+
+/*
+ * 지금 화면이 내 대화인지. 스토어의 `viewing`을 보지 않는 이유가 있다 — 스토어는
+ * 사이드바 강조를 위해 값을 먼저 바꿔 두므로, 그것으로 판단하면 되돌리는 쪽이
+ * 항상 "이미 내 대화"라고 착각하고 빠져나간다.
+ */
+const showingOwn = ref(true)
+
+/** 치워 둔 내 대화를 되돌린다. 입력하거나 "이번 세션"을 누를 때 탄다 */
+function restoreOwn() {
+  thread.viewing = 'own'
+  if (showingOwn.value) return
+  entries.value = ownEntries.value
+  ownEntries.value = []
+  showingOwn.value = true
+}
+
+watch(() => thread.resumeAt, restoreOwn)
+
 watch(
   () => thread.pendingDemo,
   async (demo) => {
     if (!demo || replaying.value) return
     replaying.value = true
+    // 내 대화는 지우지 않고 옆에 둔다. 데모에서 데모로 옮길 때 앞 데모를 내 것으로
+    // 착각하지 않도록, 치우는 것은 내 대화를 보고 있을 때뿐이다.
+    if (showingOwn.value) {
+      ownEntries.value = entries.value
+      showingOwn.value = false
+    }
     entries.value = []
-    // 내 대화가 화면에서 내려갔으니 "이번 세션"도 비운다. 화면에 없는 것을 가리키면
-    // 사이드바가 거짓말을 한다.
-    thread.startSession()
     banner.value = ''
     try {
-      for (const prompt of demo.prompts) {
+      for (const [i, prompt] of demo.prompts.entries()) {
         draft.value = prompt
         await nextTick()
         await send()
+        /*
+         * 미리 적어 둔 답변을 방금 만든 턴에 붙인다. 모델을 부른 결과가 아니다.
+         * 차단된 턴은 나가지 않았으므로 붙이지 않는다 — 차단해 놓고 답이 오면
+         * 화면이 스스로를 반박한다.
+         */
+        const last = entries.value[entries.value.length - 1]
+        const answer = demo.answers?.[i]
+        if (last && answer && last.verdict.decision !== 'BLOCK') last.demoAnswer = answer
       }
     } finally {
       draft.value = ''
@@ -127,6 +167,10 @@ function checkDecision(status, verdict) {
 async function send() {
   const text = draft.value.trim()
   if (text.length === 0 || sending.value) return
+
+  // 데모를 보다가 입력하면 내 대화로 돌아온 뒤 이어 붙인다. 데모는 읽기만 하는 자리라
+  // 남의 세션에 내 발화를 얹지 않는다.
+  if (!replaying.value) restoreOwn()
 
   sending.value = true
   banner.value = ''
@@ -245,7 +289,7 @@ function isHumanDecided(entry) {
   <div class="chat" :class="{ started }">
     <p v-if="banner" class="banner">{{ banner }}</p>
 
-    <SessionTally :entries="entries" />
+    <SessionTally :entries="entries" :own="thread.viewing === 'own'" />
 
     <section class="thread">
       <!-- S1 초기 — 인사말만. 입력창이 가운데 있다가 대화가 시작되면 내려간다 -->
@@ -272,6 +316,15 @@ function isHumanDecided(entry) {
         <MessageBubble :text="entry.inputText" :blocked="entry.verdict.decision === 'BLOCK'" />
 
         <VerdictCard :verdict="entry.verdict" :original-text="entry.inputText" />
+
+        <!-- 데모 대화의 답변. 미리 적어 둔 문장이며 모델을 부른 결과가 아니다 (0.3) -->
+        <section v-if="entry.demoAnswer" class="answer">
+          <header class="answer-head">
+            <ModelChip />
+            <span class="answer-demo">(demo) 미리 적어 둔 응답</span>
+          </header>
+          <p class="answer-body">{{ entry.demoAnswer }}</p>
+        </section>
 
         <!-- S5 검토 대기 -->
         <template v-if="entry.verdict.decision === 'PENDING'">
@@ -424,6 +477,32 @@ function isHumanDecided(entry) {
 
 .chat.started .tail {
   flex-grow: 0;
+}
+
+/* 데모 대화의 응답. 모델 출력이 아니라 미리 적어 둔 문장이다 */
+.answer {
+  margin: 10px 0 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.answer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.answer-demo {
+  color: var(--gray);
+  font-size: 12px;
+}
+.answer-body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 15px;
+  line-height: 1.85;
+  color: var(--navy);
 }
 
 .greet-enter-active,

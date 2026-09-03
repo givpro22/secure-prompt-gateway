@@ -1,13 +1,18 @@
 <script setup>
 /*
- * 이번 세션 판정 집계. 화면에 쌓인 entries에서 센다 — 서버에 묻지 않는다.
- * 감사 콘솔의 전체 통계와 다른 값이며, 여기 있는 것은 "방금 내가 보낸 것들"이다.
+ * 판정 집계. 화면에 쌓인 entries에서 센다 — 서버에 묻지 않는다.
+ * 감사 콘솔의 전체 통계와 다른 값이며, 여기 있는 것은 지금 열린 대화의 것이다.
+ *
+ * 데모 대화를 열어 두고도 "이번 세션"이라고 부르면 숫자가 거짓이 된다. 열린 것이
+ * 내 대화가 아닐 때는 제목을 바꾼다.
  */
 import { computed } from 'vue'
 import { STATUS_TERMS } from '../lib/terms'
 
 const props = defineProps({
   entries: { type: Array, required: true },
+  /** 화면에 뜬 것이 내가 입력한 대화인지 */
+  own: { type: Boolean, default: true },
 })
 
 const ORDER = ['ALLOW', 'MASK', 'BLOCK', 'PENDING']
@@ -24,7 +29,8 @@ const counts = computed(() =>
 
 <template>
   <div v-if="entries.length > 0" class="tally">
-    <span class="title">이번 세션 판정</span>
+    <span class="title">{{ own ? '이번 세션 판정' : '이 대화 판정' }}</span>
+    <span v-if="!own" class="demo">(demo)</span>
     <span v-for="c in counts" :key="c.decision" class="item" :class="`t-${c.token}`">
       <span class="dot" aria-hidden="true" />
       {{ c.label }} <strong>{{ c.n }}</strong>
@@ -45,6 +51,11 @@ const counts = computed(() =>
 
 .title {
   color: var(--gray);
+}
+
+.demo {
+  color: var(--gray);
+  font-size: 12px;
 }
 
 .item {
