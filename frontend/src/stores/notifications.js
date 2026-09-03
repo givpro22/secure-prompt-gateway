@@ -38,20 +38,23 @@ export const useNotificationStore = defineStore('notifications', {
     },
 
     /**
-     * 결과를 기다리는 해제 요청. 목록 API는 담당자 전용이라 요청자는 자기 건을
-     * 하나씩 물어야 한다. 확정이 나면 지운다.
+     * 남이 확정해 줘야 끝나는 내 건. 종이 6초마다 하나씩 물어본다.
+     *
+     * 두 종류가 있다. `unmask`는 마스킹 해제 요청(D25), `review`는 검토 대기 건의
+     * 확정(D12)이다. 어느 쪽이든 확정 시점을 예측할 수 없고 목록 API는 담당자
+     * 전용이라, 요청자가 결과를 알 길은 자기 건을 직접 묻는 것뿐이다.
+     *
+     * `key`로 중복을 막는다 — 같은 건을 두 번 담으면 알림도 두 번 뜬다.
      */
-    watch(userId, messageId, title) {
+    watch(userId, item) {
       if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [], watching: [] }
       const box = this.byUser[userId]
-      if (!box.watching.some((w) => w.messageId === messageId)) {
-        box.watching.push({ messageId, title })
-      }
+      if (!box.watching.some((w) => w.key === item.key)) box.watching.push({ ...item })
     },
 
-    unwatch(userId, messageId) {
+    unwatch(userId, key) {
       const box = this.byUser[userId]
-      if (box) box.watching = box.watching.filter((w) => w.messageId !== messageId)
+      if (box) box.watching = box.watching.filter((w) => w.key !== key)
     },
 
     push(userId, item) {

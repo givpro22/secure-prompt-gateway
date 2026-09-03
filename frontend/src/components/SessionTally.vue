@@ -17,12 +17,28 @@ const props = defineProps({
 
 const ORDER = ['ALLOW', 'MASK', 'BLOCK', 'PENDING']
 
+/** 검사 기록의 message.status를 판정 값으로 되돌린다 */
+const FROM_STATUS = { ALLOWED: 'ALLOW', MASKED: 'MASK', BLOCKED: 'BLOCK', PENDING_REVIEW: 'PENDING' }
+
+/*
+ * 담당자가 확정했으면 그 결과로 센다. 보낼 때의 판정만 세면 확정이 난 뒤에도 "검토 대기
+ * 1"로 남아, 대화에는 "최종 판정 차단"이 떠 있는데 위 숫자는 아직 기다리는 중이라고
+ * 말한다.
+ */
+function decisionOf(entry) {
+  const settled = entry.inspection
+  if (settled && settled.finalDecision !== 'PENDING') {
+    return FROM_STATUS[settled.status] ?? entry.verdict.decision
+  }
+  return entry.verdict.decision
+}
+
 const counts = computed(() =>
   ORDER.map((decision) => ({
     decision,
     label: STATUS_TERMS[decision].label,
     token: STATUS_TERMS[decision].token,
-    n: props.entries.filter((e) => e.verdict.decision === decision).length,
+    n: props.entries.filter((e) => decisionOf(e) === decision).length,
   })),
 )
 </script>

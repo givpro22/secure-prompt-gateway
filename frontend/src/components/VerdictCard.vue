@@ -9,6 +9,7 @@ import MaskedText from './MaskedText.vue'
 import StatusBadge from './StatusBadge.vue'
 import { ACTION_TERMS, CATEGORY_TERMS, OBLIGATION_TERMS, term } from '../lib/terms'
 import { expectField } from '../lib/contract'
+import { shortTitle } from '../lib/text'
 
 /*
  * 판정 결과 카드 (기획서 5.3).
@@ -28,6 +29,13 @@ const props = defineProps({
    * 데모 재생은 미리 적어 둔 답이 있어 끄고, 실제로 보낸 것에만 켠다.
    */
   autoAnswer: { type: Boolean, default: false },
+  /**
+   * 마스킹 해제 요청의 확정 결과. 종이 물어 와서 대화에 적어 둔 것을 그대로 받는다.
+   *
+   * 이 카드는 세션을 옮길 때마다 다시 만들어져 자기 상태를 기억하지 못한다. 요청했다는
+   * 사실도 확정 결과도 대화 쪽에 있어야 남는다.
+   */
+  unmask: { type: Object, default: null },
 })
 
 const matches = computed(() => {
@@ -110,21 +118,68 @@ const EXTERNAL_LLMS = [
 ]
 
 const copied = ref(false)
+const copyFailed = ref(false)
 const targetId = ref(EXTERNAL_LLMS[0].id)
 const selectedLlm = computed(() => EXTERNAL_LLMS.find((l) => l.id === targetId.value))
+
+/*
+ * navigator.clipboard 는 보안 컨텍스트(HTTPS·localhost)에서만 존재한다. 배포 서버는
+ * 평문 HTTP라 객체 자체가 없어서 "복사 후 열기"가 아무것도 하지 않고 창만 열었다.
+ * 숨긴 textarea + execCommand('copy')로 떨어뜨린다 — 폐기 예정 API지만 비보안
+ * 컨텍스트에서 동작하는 것이 이것뿐이다. HTTPS를 붙이면 위쪽 경로가 다시 쓰인다.
+ */
+function copyByTextarea(text) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.setAttribute('readonly', '')
+  // 화면 밖으로 빼되 렌더 트리에는 남긴다 — display:none 이면 선택이 되지 않는다.
+  ta.style.position = 'fixed'
+  ta.style.top = '-1000px'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+
+  const selection = document.getSelection()
+  const previous = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  ta.select()
+  ta.setSelectionRange(0, text.length) // iOS Safari는 select()만으로는 범위가 잡히지 않는다
+
+  let ok = false
+  try {
+    ok = document.execCommand('copy')
+  } catch {
+    ok = false
+  }
+
+  ta.remove()
+  if (previous && selection) {
+    selection.removeAllRanges()
+    selection.addRange(previous)
+  }
+  return ok
+}
+
+/**
+ * 보안 컨텍스트면 표준 API로, 아니면 곧바로 동기 대체 경로로. 표준 API를 먼저
+ * 기다렸다가 실패한 뒤 대체하면 사용자 제스처가 이미 풀려 execCommand도 막힌다.
+ */
+function copyApproved(text) {
+  if (!navigator.clipboard?.writeText) return Promise.resolve(copyByTextarea(text))
+  return navigator.clipboard.writeText(text).then(
+    () => true,
+    () => copyByTextarea(text),
+  )
+}
 
 async function sendToSelected() {
   const text = approvedText.value
   const target = EXTERNAL_LLMS.find((l) => l.id === targetId.value)
   if (!text || !target) return
-  try {
-    await navigator.clipboard.writeText(text)
-    copied.value = true
-    setTimeout(() => (copied.value = false), 2400)
-  } catch {
-    // 클립보드가 막힌 환경(비 HTTPS 등)에서도 창은 열어준다. 사용자가 직접 복사한다.
-    copied.value = false
-  }
+
+  const ok = await copyApproved(text)
+  copied.value = ok
+  copyFailed.value = !ok
+  // 실패 문구는 사용자가 직접 복사할 때까지 남긴다. 성공 표시만 지운다.
+  if (ok) setTimeout(() => (copied.value = false), 2400)
   const url = target.prefill
     ? `${target.url}?${target.prefill}=${encodeURIComponent(text)}`
     : target.url
@@ -260,23 +315,23 @@ async function getAnswer() {
   }
 }
 
-/** 알림 한 줄에 들어갈 만큼만 자른다 */
-function shortTitle(text) {
-  const one = (text ?? '').replace(/\s+/g, ' ').trim()
-  return one.length > 20 ? `${one.slice(0, 20)}…` : one
-}
-
 const asking = ref(false)
 const reason = ref('')
 const submitting = ref(false)
 const requested = ref(null)
+/** 요청 상태는 방금 올린 것(로컬)이거나 대화에 적힌 확정 결과다 */
+const unmaskState = computed(() => props.unmask ?? requested.value)
+const unmaskDecided = computed(() => {
+  const st = unmaskState.value?.status
+  return st === 'APPROVED' || st === 'REJECTED'
+})
 const requestError = ref('')
 
 /** 명단 규칙에 걸린 건에만 권한다. 주민번호를 풀어 달라고 할 자리는 아니다 */
 const ROSTER_CODES = ['PII-CUST-07', 'PII-CUST-08']
 const hasRosterHit = computed(() => matches.value.some((m) => ROSTER_CODES.includes(m.code)))
 const canAskUnmask = computed(
-  () => isMask.value && props.verdict.messageId != null && requested.value === null,
+  () => isMask.value && props.verdict.messageId != null && unmaskState.value === null,
 )
 
 function openAsk() {
@@ -308,7 +363,12 @@ async function submitAsk() {
     })
     // 확정이 나면 이 계정 알림함으로 돌아온다. 목록 API는 담당자 전용이라 요청자는
     // 자기 건을 직접 물어야 한다 (D25).
-    notifications.watch(session.currentUserId, props.verdict.messageId, label)
+    notifications.watch(session.currentUserId, {
+      key: `unmask:${props.verdict.messageId}`,
+      kind: 'unmask',
+      messageId: props.verdict.messageId,
+      title: label,
+    })
   } catch (err) {
     requestError.value =
       err?.response?.data?.message ?? '검토 요청을 보내지 못했습니다. 잠시 후 다시 시도하세요.'
@@ -462,7 +522,23 @@ const summary = computed(() => {
       </p>
     </section>
 
-    <p v-else-if="requested" class="unmask-done">
+    <!--
+      해제 검토 상태는 답변 재검사와 상관없는 별개의 줄이다. 예전에는 위 <section>에
+      v-else-if로 매달려 있어서, 답변을 자동으로 받아오게 된 뒤로는 답변 절이 항상 있어
+      "검토 요청됨"도 확정 결과도 영영 그려지지 않았다.
+    -->
+    <p v-if="unmaskDecided" class="unmask-done" :class="unmaskState.status.toLowerCase()">
+      <template v-if="unmaskState.status === 'APPROVED'">
+        해제 승인 — 가리지 않아도 되는 것으로 확정되었습니다.
+      </template>
+      <template v-else> 해제 거절 — 그대로 가려 두는 것으로 확정되었습니다. </template>
+      <span v-if="unmaskState.decidedBy" class="unmask-by">
+        {{ unmaskState.decidedBy }}{{ unmaskState.decisionNote ? `: ${unmaskState.decisionNote}` : ' 확정' }}
+      </span>
+      <span class="unmask-note">이미 전송된 본문은 되돌아오지 않습니다.</span>
+    </p>
+
+    <p v-else-if="unmaskState" class="unmask-done">
       검토 요청됨 — 보안 담당자가 원문과 마스킹본을 비교해 확정합니다.
       이미 전송된 본문은 되돌아오지 않습니다.
     </p>
@@ -485,6 +561,9 @@ const summary = computed(() => {
       <span class="egress-label">
         전송 승인됨{{ isMask ? ' · 마스킹 적용본' : '' }}
         <span v-if="copied" class="copied" role="status">— 복사했습니다</span>
+        <span v-else-if="copyFailed" class="copy-failed" role="status">
+          — 복사가 막혀 있습니다. 위 본문을 직접 선택해 복사하세요
+        </span>
       </span>
       <span class="egress-actions">
         <button
@@ -849,6 +928,31 @@ const summary = computed(() => {
   line-height: 1.7;
 }
 
+/* 확정이 난 건은 요청 중과 구별한다 — 둘 다 회색이면 무엇이 끝났는지 알 수 없다 */
+.unmask-done.approved,
+.unmask-done.rejected {
+  padding: 8px 10px;
+  border-left: 3px solid var(--gray);
+  border-radius: 0 6px 6px 0;
+  background: var(--card);
+  color: var(--navy);
+}
+
+.unmask-done.approved {
+  border-left-color: var(--green);
+}
+
+.unmask-done.rejected {
+  border-left-color: var(--amber);
+}
+
+.unmask-by,
+.unmask-note {
+  display: block;
+  color: var(--gray);
+  font-size: 12px;
+}
+
 .egress {
   display: flex;
   align-items: center;
@@ -907,6 +1011,10 @@ const summary = computed(() => {
 
 .copied {
   color: var(--green);
+}
+
+.copy-failed {
+  color: var(--amber);
 }
 
 .policies {

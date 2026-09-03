@@ -15,6 +15,7 @@ import { submitMessage } from '../api/messages'
 import { POLL_MAX_ATTEMPTS, usePolling } from '../composables/usePolling'
 import { errorText, expectField } from '../lib/contract'
 import { DECIDED_BY_TERMS, term } from '../lib/terms'
+import { shortTitle } from '../lib/text'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 import { notificationFromVerdict, useNotificationStore } from '../stores/notifications'
@@ -211,7 +212,22 @@ async function send() {
       notifications.push(session.currentUserId, notificationFromVerdict(verdict))
     }
 
-    if (verdict.decision === 'PENDING') startPolling(entry)
+    if (verdict.decision === 'PENDING') {
+      startPolling(entry)
+      /*
+       * 확정은 남이 한다. 폴링은 AI 분석이 끝나면 멈추고, 그 뒤 담당자가 허용으로
+       * 정하든 거절하든 이 화면은 아무것도 모른 채 "검토 대기"로 남아 있었다 —
+       * 결과를 보려면 아래 새로고침 버튼을 눌러야 했다. 종에 맡겨 두면 계정을
+       * 바꿔 갔다 와도 알림과 대화가 함께 따라온다 (D12).
+       */
+      notifications.watch(session.currentUserId, {
+        key: `review:${verdict.inspectionId}`,
+        kind: 'review',
+        inspectionId: verdict.inspectionId,
+        sessionId: thread.activeId,
+        title: shortTitle(text),
+      })
+    }
   } catch (err) {
     banner.value = errorText(err, '전송에 실패했습니다.')
   } finally {
@@ -323,7 +339,12 @@ function isHumanDecided(entry) {
         -->
         <MessageBubble :text="entry.inputText" :blocked="entry.verdict.decision === 'BLOCK'" />
 
-        <VerdictCard :verdict="entry.verdict" :original-text="entry.inputText" :auto-answer="entry.live" />
+        <VerdictCard
+          :verdict="entry.verdict"
+          :original-text="entry.inputText"
+          :auto-answer="entry.live"
+          :unmask="entry.unmask"
+        />
 
         <!-- 데모 대화의 답변. 미리 적어 둔 문장이며 모델을 부른 결과가 아니다 (0.3) -->
         <section v-if="entry.demoAnswer" class="answer">

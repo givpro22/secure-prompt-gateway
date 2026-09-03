@@ -120,6 +120,27 @@ export const useThreadStore = defineStore('thread', {
       }
     },
 
+    /**
+     * 담당자 확정으로 검토 대기가 풀렸을 때. **심각도를 따지지 않고 그 값으로 바꾼다.**
+     *
+     * `raiseDecision`으로는 안 된다 — 허용으로 확정되면 ALLOW(0)가 PENDING(2)보다 낮아
+     * 값이 그대로 남는다. 대화는 영영 "검토 대기"로 보이고, 그 상태의 대화는 지울 수도
+     * 없다. 확정은 올리는 것이 아니라 갈아 끼우는 것이다.
+     *
+     * 계정 전체를 뒤지는 이유는 폴링이 도는 계정과 그 대화를 만든 계정이 같다는 보장이
+     * 코드로 강제되지 않기 때문이다. id는 계정과 무관하게 고유하다.
+     */
+    settleDecision(sessionId, decision) {
+      for (const slot of Object.values(this.byUser)) {
+        const s = slot.sessions?.find((x) => x.id === sessionId)
+        if (s) {
+          s.decision = decision
+          return true
+        }
+      }
+      return false
+    },
+
     /** 담당자 확정 등으로 판정이 바뀌었을 때 */
     raiseDecision(decision) {
       const s = this.active

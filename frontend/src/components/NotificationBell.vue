@@ -13,13 +13,16 @@
  * 목록 API가 담당자 전용이라(D25) 요청자가 결과를 알 길이 그것뿐이기도 하다.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { fetchInspections } from '../api/inspections'
+import { fetchInspection, fetchInspections } from '../api/inspections'
 import { fetchMyUnmaskRequest, fetchUnmaskRequests } from '../api/unmask'
+import { findByInspection, findByMessage } from '../stores/conversationCache'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
+import { useThreadStore } from '../stores/thread'
 
 const session = useSessionStore()
 const notifications = useNotificationStore()
+const thread = useThreadStore()
 
 const open = ref(false)
 const panel = ref(null)
@@ -90,34 +93,95 @@ async function pollIncoming() {
   notifications.settle(userId, alive)
 }
 
-const OUTCOME = {
+const UNMASK_OUTCOME = {
   APPROVED: { tone: 'allow', kind: '해제 승인', verb: '가리지 않아도 되는 것으로 확정되었습니다' },
   REJECTED: { tone: 'mask', kind: '마스킹 유지', verb: '그대로 가려 두는 것으로 확정되었습니다' },
 }
 
-/** 요청자 — 내가 올린 건이 어떻게 됐는지 하나씩 묻는다 */
+/** 검토 대기 건의 확정. message.status 값이 그대로 온다 */
+const REVIEW_OUTCOME = {
+  ALLOWED: { tone: 'allow', kind: '검토 승인', verb: '전송이 허용되었습니다' },
+  MASKED: { tone: 'mask', kind: '검토 승인', verb: '마스킹 후 전송으로 확정되었습니다' },
+  BLOCKED: { tone: 'block', kind: '검토 거절', verb: '전송이 거절되었습니다' },
+}
+
+/*
+ * 요청자 — 내가 올린 건이 어떻게 됐는지 하나씩 묻는다.
+ *
+ * 두 종류를 함께 본다. 마스킹 해제 요청(D25)과 검토 대기 건의 확정(D12)이다. 뒤엣것은
+ * 예전에 화면의 "결과 새로고침" 버튼으로만 알 수 있었는데, 담당자가 거절해도 요청자
+ * 쪽에는 아무 일도 일어나지 않아서 확정이 났는지조차 알 수 없었다. 확정은 남이 하는
+ * 일이라 요청자 화면이 스스로 알아챌 방법이 폴링밖에 없다.
+ *
+ * 확정을 받으면 알림만 띄우고 끝내지 않는다. 그 대화의 판정 카드와 사이드바 점까지
+ * 함께 고친다 — 알림에는 "거절됨"이라 떠 있는데 대화는 여전히 "검토 대기"면 어느
+ * 쪽을 믿어야 할지 알 수 없다.
+ */
 async function pollOutcome() {
   const userId = session.currentUserId
   const watching = notifications.byUser[userId]?.watching ?? []
   for (const w of [...watching]) {
     try {
-      const row = await fetchMyUnmaskRequest(w.messageId)
-      if (row.status === 'PENDING') continue
-      const o = OUTCOME[row.status]
-      notifications.pushOnce(userId, `outcome:${row.requestId}`, {
-        tone: o.tone,
-        kind: o.kind,
-        title: `${w.title} — ${o.verb}`,
-        body: row.decisionNote
-          ? `${row.decidedBy}: ${row.decisionNote}`
-          : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
-      })
-      notifications.settle(userId, [])
-      notifications.unwatch(userId, w.messageId)
+      if (w.kind === 'review') await settleReview(userId, w)
+      else await settleUnmask(userId, w)
     } catch {
       // 아직 없거나 잠깐 실패한 것이다. 다음 차례에 다시 묻는다.
     }
   }
+}
+
+async function settleReview(userId, w) {
+  const inspection = await fetchInspection(w.inspectionId)
+  // 사람이 확정하기 전까지는 finalDecision이 PENDING이다. AI 분석이 끝난 것과 다르다.
+  if (!inspection || inspection.finalDecision === 'PENDING') return
+
+  const o = REVIEW_OUTCOME[inspection.status] ?? REVIEW_OUTCOME.BLOCKED
+  notifications.pushOnce(userId, `review:${w.inspectionId}`, {
+    tone: o.tone,
+    kind: o.kind,
+    title: `${w.title} — ${o.verb}`,
+    body: '보안 담당자가 확정했습니다.',
+    link: '/',
+    linkLabel: '대화에서 보기',
+  })
+
+  // 대화에도 같은 결과를 적는다. 화면에 떠 있지 않은 세션이어도 캐시에서 찾아 고친다.
+  const found = findByInspection(w.inspectionId)
+  if (found) {
+    found.entry.inspection = inspection
+    found.entry.aiStatus = inspection.aiStatus
+    found.entry.note = ''
+    thread.settleDecision(found.sessionId, inspection.status)
+  } else if (w.sessionId) {
+    thread.settleDecision(w.sessionId, inspection.status)
+  }
+
+  notifications.settle(userId, [])
+  notifications.unwatch(userId, w.key)
+}
+
+async function settleUnmask(userId, w) {
+  const row = await fetchMyUnmaskRequest(w.messageId)
+  if (row.status === 'PENDING') return
+
+  const o = UNMASK_OUTCOME[row.status]
+  notifications.pushOnce(userId, `outcome:${row.requestId}`, {
+    tone: o.tone,
+    kind: o.kind,
+    title: `${w.title} — ${o.verb}`,
+    body: row.decisionNote
+      ? `${row.decidedBy}: ${row.decisionNote}`
+      : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
+    link: '/',
+    linkLabel: '대화에서 보기',
+  })
+
+  // 판정 카드가 확정 결과를 그린다. 요청만 하고 결과를 모르는 화면이 남지 않게.
+  const found = findByMessage(w.messageId)
+  if (found) found.entry.unmask = row
+
+  notifications.settle(userId, [])
+  notifications.unwatch(userId, w.key)
 }
 
 async function poll() {
@@ -223,7 +287,7 @@ onUnmounted(() => {
           <span class="row-title">{{ n.title }}</span>
           <span v-if="n.body" class="row-body">{{ n.body }}</span>
           <RouterLink v-if="n.link" :to="n.link" class="row-link" @click="open = false">
-            감사 콘솔에서 보기
+            {{ n.linkLabel ?? '감사 콘솔에서 보기' }}
           </RouterLink>
         </li>
       </ul>
