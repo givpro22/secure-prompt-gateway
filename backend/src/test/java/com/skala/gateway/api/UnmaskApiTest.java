@@ -209,6 +209,39 @@ class UnmaskApiTest {
                 });
     }
 
+    @Test
+    @DisplayName("요청자는 자기 건의 처리 상태를 본다 — 원문은 실리지 않는다")
+    void requesterSeesOwnOutcome() throws Exception {
+        long messageId = maskedMessage();
+        long requestId = json(request(messageId, EMPLOYEE, "우리 팀 대리입니다.")).path("requestId").asLong();
+        decide(requestId, ADMIN, true, "직원 확인함.");
+
+        MvcResult result = mockMvc.perform(get("/api/v1/messages/{id}/unmask-request", messageId)
+                        .header("X-User-Id", EMPLOYEE))
+                .andReturn();
+        JsonNode body = json(result);
+
+        assertThat(body.path("status").asText()).isEqualTo("APPROVED");
+        assertThat(body.path("decisionNote").asText()).isEqualTo("직원 확인함.");
+        assertThat(body.path("decidedBy").asText()).isEqualTo("박OO");
+        // 자기 원문은 화면이 이미 들고 있다. 여기서 필요한 것은 담당자의 판단뿐이다.
+        assertThat(body.path("originalText").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("남의 건 상태는 볼 수 없다 — 403")
+    void othersOutcomeIsHidden() throws Exception {
+        long messageId = maskedMessage();
+        request(messageId, EMPLOYEE, "확인 부탁");
+
+        mockMvc.perform(get("/api/v1/messages/{id}/unmask-request", messageId)
+                        .header("X-User-Id", DemoCases.USER_SALES))
+                .andExpect(result -> {
+                    assertThat(result.getResponse().getStatus()).isEqualTo(403);
+                    assertThat(errorCode(result)).isEqualTo("FORBIDDEN_NOT_AUTHOR");
+                });
+    }
+
     // --- 도우미 -------------------------------------------------------------
 
     private long maskedMessage() {

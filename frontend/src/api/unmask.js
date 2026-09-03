@@ -15,6 +15,15 @@ export async function requestUnmask(messageId, reason) {
 }
 
 /**
+ * GET /messages/{id}/unmask-request — 요청자가 자기 건의 처리 상태를 본다.
+ * 목록은 담당자 전용이라 요청자가 결과를 알 길이 이것뿐이다. 원문은 실리지 않는다.
+ */
+export async function fetchMyUnmaskRequest(messageId) {
+  const { data } = await client.get(`/messages/${messageId}/unmask-request`)
+  return data
+}
+
+/**
  * GET /unmask-requests — 담당자 목록.
  * **원문이 실려 오는 유일한 응답이다.** 요청이 붙은 건에 한해서만 열린다.
  */

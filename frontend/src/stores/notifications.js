@@ -21,7 +21,7 @@ let seq = 0
 
 export const useNotificationStore = defineStore('notifications', {
   state: () => ({
-    /** { [userId]: { items: [], seenIds: [] } } */
+    /** { [userId]: { items: [], seenIds: [], watching: [] } } */
     byUser: {},
     userId: 0,
   }),
@@ -33,12 +33,29 @@ export const useNotificationStore = defineStore('notifications', {
   },
   actions: {
     useAccount(userId) {
-      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [] }
+      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [], watching: [] }
       this.userId = userId
     },
 
+    /**
+     * 결과를 기다리는 해제 요청. 목록 API는 담당자 전용이라 요청자는 자기 건을
+     * 하나씩 물어야 한다. 확정이 나면 지운다.
+     */
+    watch(userId, messageId, title) {
+      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [], watching: [] }
+      const box = this.byUser[userId]
+      if (!box.watching.some((w) => w.messageId === messageId)) {
+        box.watching.push({ messageId, title })
+      }
+    },
+
+    unwatch(userId, messageId) {
+      const box = this.byUser[userId]
+      if (box) box.watching = box.watching.filter((w) => w.messageId !== messageId)
+    },
+
     push(userId, item) {
-      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [] }
+      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [], watching: [] }
       const box = this.byUser[userId]
       box.items.unshift({ id: `n${++seq}`, at: new Date().toISOString(), read: false, ...item })
       if (box.items.length > MAX_ITEMS) box.items.length = MAX_ITEMS
@@ -49,7 +66,7 @@ export const useNotificationStore = defineStore('notifications', {
      * 키를 기억해 두지 않으면 6초마다 같은 알림이 쌓인다.
      */
     pushOnce(userId, key, item) {
-      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [] }
+      if (!this.byUser[userId]) this.byUser[userId] = { items: [], seenIds: [], watching: [] }
       const box = this.byUser[userId]
       if (box.seenIds.includes(key)) return false
       box.seenIds.push(key)

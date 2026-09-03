@@ -91,6 +91,27 @@ public class UnmaskService {
     }
 
     /**
+     * 요청자가 자기 건의 처리 상태를 본다 (D25).
+     *
+     * <p>목록({@link #forConsole})은 담당자 전용이라 요청자가 결과를 알 길이 없었다. 확정이
+     * 기록으로만 남고 요청한 사람에게 돌아가지 않으면 고리가 닫히지 않는다.
+     *
+     * <p>원문은 싣지 않는다. 자기 문장은 화면이 이미 들고 있고, 여기서 필요한 것은
+     * 담당자가 무엇으로 정했는지다.
+     */
+    @Transactional(readOnly = true)
+    public UnmaskRequestDto mine(Long messageId, Long userId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> ApiException.messageNotFound(messageId));
+        if (!message.getUser().getUserId().equals(userId)) {
+            throw ApiException.notAuthor(messageId);
+        }
+        return unmaskRepository.findByMessage_MessageId(messageId)
+                .map(UnmaskRequestDto::forRequester)
+                .orElseThrow(() -> ApiException.unmaskRequestNotFound(messageId));
+    }
+
+    /**
      * 담당자 콘솔 목록. <b>원문이 실린다</b> — 요청 행이 있는 건에 한해서다.
      */
     @Transactional(readOnly = true)

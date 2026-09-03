@@ -757,6 +757,23 @@ export function fixtureServer() {
               return send(res, 201, state.unmaskRow(created, false))
             }
 
+            const mineMatch = path.match(/^\/messages\/(\d+)\/unmask-request$/)
+            if (req.method === 'GET' && mineMatch) {
+              if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
+              const user = USERS.find((u) => u.userId === userId)
+              if (!user) return fail(res, 400, 'INVALID_USER', `user ${userId} not found`)
+
+              const messageId = Number(mineMatch[1])
+              const inspection = [...state.inspections.values()].find((i) => i.messageId === messageId)
+              if (!inspection) return fail(res, 404, 'MESSAGE_NOT_FOUND', `message ${messageId}를 찾을 수 없습니다.`)
+              if (inspection.user.userId !== userId) {
+                return fail(res, 403, 'FORBIDDEN_NOT_AUTHOR', '자기 건만 볼 수 있습니다.')
+              }
+              const found = [...state.unmaskRequests.values()].find((r) => r.messageId === messageId)
+              if (!found) return fail(res, 404, 'UNMASK_REQUEST_NOT_FOUND', '해제 요청이 없습니다.')
+              return send(res, 200, state.unmaskRow(found, false))
+            }
+
             if (req.method === 'GET' && path === '/unmask-requests') {
               if (!req.headers['x-user-id']) return fail(res, 400, 'MISSING_USER_HEADER', 'X-User-Id header is required')
               const user = USERS.find((u) => u.userId === userId)

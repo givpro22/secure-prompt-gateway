@@ -7,11 +7,13 @@
  *
  * 해제 요청 알림은 **서버에 물어서 만든다**. 직원 화면이 담당자 화면에 직접 건네주는
  * 편이 짧지만, 계정을 옮겨 다니며 시연하는 자리에서 화면끼리 몰래 주고받으면 정말
- * 도는 것인지 흉내인지 구분할 수 없다. 목록 API는 담당자만 부를 수 있으므로 (D25)
- * 폴링도 담당자일 때만 돈다.
+ * 도는 것인지 흉내인지 구분할 수 없다.
+ *
+ * 그래서 양쪽이 각자 자기 것을 묻는다. 담당자는 목록을, 요청자는 자기 건 하나를.
+ * 목록 API가 담당자 전용이라(D25) 요청자가 결과를 알 길이 그것뿐이기도 하다.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { fetchUnmaskRequests } from '../api/unmask'
+import { fetchMyUnmaskRequest, fetchUnmaskRequests } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
 
@@ -44,8 +46,8 @@ function clock(iso) {
 const POLL_MS = 6000
 let timer = null
 
-async function pollUnmask() {
-  if (!isAdmin.value) return
+/** 담당자 — 들어온 요청을 목록으로 받는다 */
+async function pollIncoming() {
   const userId = session.currentUserId
   try {
     const page = await fetchUnmaskRequests({ status: 'PENDING', size: 20 })
@@ -63,15 +65,59 @@ async function pollUnmask() {
   }
 }
 
+const OUTCOME = {
+  APPROVED: { tone: 'allow', kind: '해제 승인', verb: '가리지 않아도 되는 것으로 확정되었습니다' },
+  REJECTED: { tone: 'mask', kind: '마스킹 유지', verb: '그대로 가려 두는 것으로 확정되었습니다' },
+}
+
+/** 요청자 — 내가 올린 건이 어떻게 됐는지 하나씩 묻는다 */
+async function pollOutcome() {
+  const userId = session.currentUserId
+  const watching = notifications.byUser[userId]?.watching ?? []
+  for (const w of [...watching]) {
+    try {
+      const row = await fetchMyUnmaskRequest(w.messageId)
+      if (row.status === 'PENDING') continue
+      const o = OUTCOME[row.status]
+      notifications.pushOnce(userId, `outcome:${row.requestId}`, {
+        tone: o.tone,
+        kind: o.kind,
+        title: `${w.title} — ${o.verb}`,
+        body: row.decisionNote
+          ? `${row.decidedBy}: ${row.decisionNote}`
+          : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
+      })
+      notifications.unwatch(userId, w.messageId)
+    } catch {
+      // 아직 없거나 잠깐 실패한 것이다. 다음 차례에 다시 묻는다.
+    }
+  }
+}
+
+async function poll() {
+  if (isAdmin.value) await pollIncoming()
+  else await pollOutcome()
+}
+
 function restartPolling() {
   clearInterval(timer)
   timer = null
-  if (!isAdmin.value) return
-  pollUnmask()
-  timer = setInterval(pollUnmask, POLL_MS)
+  poll()
+  timer = setInterval(poll, POLL_MS)
 }
 
-watch(() => session.currentUserId, restartPolling)
+/*
+ * 계정을 알림함에 묶는 것은 여기서 한다. 종이 헤더에 있어 감사 콘솔에도 뜨는데,
+ * 챗 화면에서만 묶으면 콘솔에서 계정을 바꿨을 때 앞 계정의 알림함이 그대로 남는다.
+ */
+watch(
+  () => session.currentUserId,
+  (id) => {
+    notifications.useAccount(id)
+    restartPolling()
+  },
+  { immediate: true },
+)
 watch(isAdmin, restartPolling)
 
 onMounted(() => {
@@ -139,7 +185,10 @@ onUnmounted(() => {
         </li>
       </ul>
 
-      <p v-if="isAdmin" class="pop-foot">해제 요청은 서버에서 {{ POLL_MS / 1000 }}초마다 확인합니다.</p>
+      <p class="pop-foot">
+        {{ isAdmin ? '들어온 해제 요청' : '내가 올린 해제 요청' }}은 서버에서
+        {{ POLL_MS / 1000 }}초마다 확인합니다.
+      </p>
     </div>
   </div>
 </template>
@@ -149,8 +198,6 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   justify-content: flex-end;
-  /* 레일 위쪽 여백을 끌어올려 헤더 선 가까이 붙인다 */
-  margin: -10px 0 10px;
 }
 
 /* 테두리도 채움도 없다. 종 하나면 눌리는 자리인 것이 읽힌다 */

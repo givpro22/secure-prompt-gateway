@@ -46,6 +46,13 @@ public class UnmaskController {
         return unmaskService.request(messageId, userId, body);
     }
 
+    /** 요청자가 자기 건의 처리 상태를 확인한다. 원문은 실리지 않는다 */
+    @GetMapping("/messages/{id}/unmask-request")
+    public UnmaskRequestDto mine(@PathVariable("id") Long messageId,
+                                 @CurrentUserId Long userId) {
+        return unmaskService.mine(messageId, userId);
+    }
+
     @GetMapping("/unmask-requests")
     public PageEnvelope<UnmaskRequestDto> list(@CurrentUserId Long userId,
                                                @RequestParam(value = "status", required = false) String status,

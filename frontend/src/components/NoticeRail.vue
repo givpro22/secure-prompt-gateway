@@ -11,7 +11,6 @@
  */
 import { computed, ref } from 'vue'
 import { useSessionStore } from '../stores/session'
-import NotificationBell from './NotificationBell.vue'
 
 /*
  * 접힘 상태를 모듈 스코프에 둔다. 챗 ↔ 감사 콘솔을 오갈 때 컴포넌트가 다시 마운트되는데,
@@ -76,9 +75,6 @@ const baseDate = computed(() => {
     보간하고, 안쪽 내용은 페이드로 교차시킨다.
   -->
   <aside class="rail" :class="{ collapsed }">
-    <!-- 종은 접어도 남는다. 알림은 소식과 달리 접어 둘 수 있는 것이 아니다 -->
-    <NotificationBell />
-
     <div class="panel" :aria-hidden="collapsed">
       <div class="rail-head">
         <h2>알아둘 소식</h2>
@@ -139,8 +135,7 @@ const baseDate = computed(() => {
 /* 띠 전체가 버튼이다. 어디를 눌러도 펼쳐진다 */
 .reopen {
   position: absolute;
-  /* 종 아래로. 접힌 상태에서도 종은 남으므로 그 자리를 비켜야 한다 */
-  top: 58px;
+  top: 24px;
   left: 0;
   display: inline-flex;
   align-items: center;
@@ -193,8 +188,6 @@ const baseDate = computed(() => {
 
 .rail {
   position: relative;
-  display: flex;
-  flex-direction: column;
   width: 336px;
   flex: none;
   padding: 24px 22px;
@@ -326,13 +319,13 @@ h2 {
   font-weight: 600;
 }
 .panel {
-  flex: 1;
   /* 폭이 줄어드는 동안 안쪽이 다시 흐르지 않게 너비를 고정한다. 그래야 접히는 것이
      글자가 재배치되는 게 아니라 패널이 미끄러지는 것으로 보인다 */
   display: flex;
   flex-direction: column;
   gap: 6px;
   width: 292px;
+  height: 100%;
   min-height: 0;
   opacity: 1;
   transition: opacity 200ms ease 90ms;

@@ -12,6 +12,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSessionStore } from '../stores/session'
+import NotificationBell from './NotificationBell.vue'
 
 const route = useRoute()
 const session = useSessionStore()
@@ -42,14 +43,22 @@ const ruleCount = computed(() =>
     </div>
 
     <div class="status">
-      <span class="live">
-        <span class="dot" aria-hidden="true" />
-        게이트웨이 보호 활성
-      </span>
-      <span v-if="session.policiesLoaded" class="meta">
-        적용 정책 <strong>{{ session.policies.length }}</strong> · 규칙
-        <strong>{{ ruleCount }}</strong>종
-      </span>
+      <div class="status-line">
+        <span class="live">
+          <span class="dot" aria-hidden="true" />
+          게이트웨이 보호 활성
+        </span>
+        <span v-if="session.policiesLoaded" class="meta">
+          적용 정책 <strong>{{ session.policies.length }}</strong> · 규칙
+          <strong>{{ ruleCount }}</strong>종
+        </span>
+      </div>
+
+      <!--
+        알림은 알아둘 소식과 다른 것이라 레일이 아니라 여기 있다. 소식은 부서에 적용되는
+        정책이고, 알림은 내 계정에 일어난 일이다. 화면을 오가도 따라오도록 헤더에 둔다.
+      -->
+      <NotificationBell />
     </div>
   </header>
 </template>
@@ -81,9 +90,15 @@ const ruleCount = computed(() =>
 
 .status {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 14.5px;
+}
+.status-line {
+  display: flex;
   align-items: center;
   gap: 18px;
-  font-size: 14.5px;
 }
 
 /* 알약 테두리를 걷어냈다. 상태는 점과 글자로 충분하고, 둥근 배지를 늘어놓으면

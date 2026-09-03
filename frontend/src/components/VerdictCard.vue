@@ -146,6 +146,12 @@ const isMask = computed(() => props.verdict.decision === 'MASK')
  * 화면이 더 위험하다. 얻는 것은 "이 건은 가릴 필요가 없었다"는 판단이고, 그것을 근거로
  * 다시 보내는 것은 사람이 한다.
  */
+/** 알림 한 줄에 들어갈 만큼만 자른다 */
+function shortTitle(text) {
+  const one = (text ?? '').replace(/\s+/g, ' ').trim()
+  return one.length > 20 ? `${one.slice(0, 20)}…` : one
+}
+
 const asking = ref(false)
 const reason = ref('')
 const submitting = ref(false)
@@ -175,12 +181,20 @@ async function submitAsk() {
   try {
     requested.value = await requestUnmask(props.verdict.messageId, text)
     asking.value = false
+    /*
+     * 어느 발화에 대한 요청인지 함께 남긴다. 알림함이 계정 단위라 세션을 여럿 돌리고
+     * 나면 "마스킹 검토를 요청했습니다"만으로는 어느 건인지 알 수 없다.
+     */
+    const label = shortTitle(props.originalText)
     notifications.push(session.currentUserId, {
       tone: 'request',
       kind: '검토 요청',
-      title: '마스킹 검토를 요청했습니다',
+      title: `${label} — 마스킹 검토를 요청했습니다`,
       body: text,
     })
+    // 확정이 나면 이 계정 알림함으로 돌아온다. 목록 API는 담당자 전용이라 요청자는
+    // 자기 건을 직접 물어야 한다 (D25).
+    notifications.watch(session.currentUserId, props.verdict.messageId, label)
   } catch (err) {
     requestError.value =
       err?.response?.data?.message ?? '검토 요청을 보내지 못했습니다. 잠시 후 다시 시도하세요.'
