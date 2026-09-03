@@ -30,13 +30,18 @@ server:
 # --- AI 확장 지점 (기획서 11.3) — 키·모델·지연은 전부 환경변수 ---
 ai:
   provider: ${AI_PROVIDER:mock}          # mock | llm
-  endpoint: ${AI_ENDPOINT:}              # llm 프로파일에서만 사용
+  # llm 프로파일 전용. 사내망 Ollama를 가리키므로 외부로 나가는 요청이 없다 (교수 피드백 F3).
+  endpoint: ${AI_ENDPOINT:http://localhost:11434/api/chat}
   api-key: ${AI_API_KEY:}
-  model: ${AI_MODEL:}
+  # qwen3.5:2b는 골든셋 22/42(오탐 14)로 탈락했다. 7b가 하한이다 (_workspace/05 §1-5).
+  model: ${AI_MODEL:qwen2.5:7b-instruct}
   temperature: ${AI_TEMPERATURE:0}
   max-tokens: ${AI_MAX_TOKENS:800}
-  timeout-ms: ${AI_TIMEOUT_MS:10000}
+  # 7b 배치 1회가 약 9초다. 10초로 두면 첫 호출(모델 로딩)에서 타임아웃이 난다
+  timeout-ms: ${AI_TIMEOUT_MS:60000}
   max-input-chars: ${AI_MAX_INPUT_CHARS:4000}
+  # 한 호출에 문장 하나. 여러 개를 묶으면 같은 문장이 이웃에 따라 다른 판정을 받는다 (_workspace/05 §2)
+  batch-size: ${AI_BATCH_SIZE:1}
   mock:
     delay-ms: ${AI_MOCK_DELAY_MS:2500}
     fail-keyword: ${AI_MOCK_FAIL_KEYWORD:__FAIL__}
