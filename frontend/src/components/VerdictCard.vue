@@ -172,7 +172,7 @@ const canCheckAnswer = computed(
 )
 
 const ANSWER_TONE = {
-  ALLOW: '답변에서 걸린 규칙이 없습니다.',
+  ALLOW: '통과 — 질문에 대한 답변에 문제 없음',
   MASK: '답변에서 탐지된 항목을 라벨로 치환했습니다.',
   BLOCK: '이 답변은 그대로 두기 어렵습니다. 아래 규칙에 걸렸습니다.',
   PENDING: '보안 담당자 확인이 필요합니다.',
@@ -202,6 +202,10 @@ async function checkAnswer() {
 }
 
 const answerMatches = computed(() => answerVerdict.value?.ruleResult?.matches ?? [])
+
+/** 통과한 답변은 접어 둔다. 한 줄이면 충분하고, 내용은 세부사항으로 편다 */
+const showAnswerDetail = ref(false)
+const answerPassed = computed(() => answerVerdict.value?.decision === 'ALLOW')
 
 /*
  * 답변 받기 — 게이트웨이가 모델을 직접 불러 답변을 받고 곧바로 출력 검사에 넘긴다.
@@ -432,7 +436,18 @@ const summary = computed(() => {
           <span class="answer-cat">{{ term(CATEGORY_TERMS, m.category) }}</span>
         </li>
       </ul>
-      <p v-if="answerVerdict.inspectedText" class="answer-body">
+      <button
+        v-if="answerPassed && answerVerdict.inspectedText"
+        type="button"
+        class="answer-detail-toggle"
+        @click="showAnswerDetail = !showAnswerDetail"
+      >
+        {{ showAnswerDetail ? '세부사항 접기' : '세부사항' }}
+      </button>
+      <p
+        v-if="answerVerdict.inspectedText && (!answerPassed || showAnswerDetail)"
+        class="answer-body"
+      >
         <MaskedText :text="answerVerdict.inspectedText" />
       </p>
     </section>
@@ -736,6 +751,16 @@ const summary = computed(() => {
 .answer-cat {
   margin-left: 6px;
   color: var(--gray);
+}
+.answer-detail-toggle {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 12.5px;
+  cursor: pointer;
 }
 .answer-body {
   margin: 10px 0 0;

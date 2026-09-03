@@ -32,6 +32,45 @@ const router = useRouter()
 const filters = ref({ deptId: '', status: '', from: '', to: '' })
 const page = ref(0)
 const rows = ref([])
+
+/*
+ * 답변 행을 질문 행 바로 아래에 붙이고 번호를 매긴다.
+ *
+ * 서버는 시각 역순으로 주므로 답변 검사(나중에 생김)가 질문 위에 떠서, 어떤 질문의
+ * 답인지 알 수 없었다. 같은 messageId끼리 묶어 질문 → 답변 순으로 놓는다. 번호는
+ * 질문 기준이고 답변은 같은 번호를 물려받는다 — 한 건의 검사가 두 줄인 것이지 두 건이 아니다.
+ * 필터로 질문이 빠진 답변은 맨 뒤에 그대로 둔다.
+ */
+function groupRows(items) {
+  const answers = new Map()
+  for (const r of items) {
+    if (r.phase !== 'OUTPUT') continue
+    const list = answers.get(r.messageId) ?? []
+    list.push(r)
+    answers.set(r.messageId, list)
+  }
+  const out = []
+  const placed = new Set()
+  let n = 0
+  for (const r of items) {
+    if (r.phase === 'OUTPUT') continue
+    n += 1
+    out.push({ ...r, seq: n })
+    for (const a of answers.get(r.messageId) ?? []) {
+      out.push({ ...a, seq: n, isAnswer: true })
+      placed.add(a.inspectionId)
+    }
+  }
+  for (const r of items) {
+    if (r.phase === 'OUTPUT' && !placed.has(r.inspectionId)) {
+      n += 1
+      out.push({ ...r, seq: n, isAnswer: true, orphan: true })
+    }
+  }
+  return out
+}
+
+const selectedRow = computed(() => rows.value.find((r) => r.inspectionId === selectedId.value) ?? null)
 const total = ref(0)
 const listLoading = ref(false)
 const listError = ref('')
@@ -151,7 +190,7 @@ async function loadList(resetPage = false) {
       'GET /inspections 응답이 목록 봉투 {items,page,size,total}가 아닙니다 (계약서 C1)',
       envelope,
     )
-    rows.value = envelope.items
+    rows.value = groupRows(envelope.items)
     total.value = envelope.total
   } catch (err) {
     rows.value = []
@@ -396,6 +435,7 @@ onMounted(async () => {
         <table>
           <thead>
             <tr>
+              <th class="num">No.</th>
               <th>시각</th>
               <th>사용자 / 부서</th>
               <th>마스킹 본문</th>
@@ -420,10 +460,14 @@ onMounted(async () => {
                 :class="{ selected: row.inspectionId === selectedId }"
                 @click="loadDetail(row.inspectionId)"
               >
+                <td class="num seq">
+                  <span v-if="row.isAnswer" class="seq-answer" aria-label="답변">↳</span>
+                  <span v-else>{{ row.seq }}</span>
+                </td>
                 <td class="time">
                   {{ formatTime(row.createdAt) }}
-                  <!-- 답변 검사 행은 프롬프트 행과 같은 표에 섞여 있다. 어느 쪽인지 표시한다 (UC-08) -->
-                  <span v-if="row.phase === 'OUTPUT'" class="phase-tag">답변</span>
+                  <!-- 답변 검사 행은 질문 행 바로 아래 붙는다. 어느 쪽인지 표시한다 (UC-08) -->
+                  <span v-if="row.isAnswer" class="phase-tag">답변</span>
                 </td>
                 <td>
                   <span class="who">
@@ -465,12 +509,14 @@ onMounted(async () => {
         <template v-else-if="detail">
           <header class="panel-head">
             <div class="panel-title">
+              <span v-if="selectedRow" class="seq-badge">No. {{ selectedRow.seq }}</span>
               <span class="insp-id">#{{ detail.inspectionId }}</span>
               <StatusBadge :value="detail.status" />
               <StatusBadge v-if="humanDecided" :value="detail.finalDecision" prefix="최종 판정" />
             </div>
             <p class="caption">
-              {{ detail.user.name }} · {{ detail.user.department }} ·
+              {{ detail.user.department }} · {{ detail.user.name }} ·
+              {{ detail.phase === 'OUTPUT' ? '답변 검사' : '프롬프트 검사' }} ·
               {{ formatTime(detail.createdAt) }}
             </p>
 
@@ -500,9 +546,23 @@ onMounted(async () => {
           <!-- 1. 원문 — 마스킹본만. 원문(original_text)은 응답에 없고 표시하지도 않는다 -->
           <section class="section">
             <h3 class="section-title">마스킹 본문 · 원문은 표시하지 않습니다</h3>
-            <p v-if="detail.phase === 'OUTPUT'" class="phase-note caption">
-              답변 검사 — 모델이 돌려준 답변을 같은 정책으로 다시 본 결과입니다. 아래 본문은 답변입니다.
-            </p>
+            <template v-if="detail.phase === 'OUTPUT'">
+              <!-- 답변은 질문과 같이 봐야 한다. 무엇에 대한 답인지 없이 답변만 두면 판단할 수 없다 -->
+              <p
+                v-if="detail.finalDecision === 'ALLOW'"
+                class="pass-note"
+              >
+                통과 — 질문에 대한 답변에 문제 없음
+              </p>
+              <p v-else-if="detail.finalDecision === 'PENDING'" class="phase-note caption">
+                답변 검사 — 원문 유출이 의심되어 확인이 필요합니다.
+              </p>
+              <div class="qa-block">
+                <span class="qa-label">질문 (모델에 보낸 마스킹본)</span>
+                <p class="qa-body"><MaskedText :text="detail.promptText ?? ''" /></p>
+              </div>
+              <span class="qa-label">답변</span>
+            </template>
             <p v-if="detail.submittedText === null" class="empty caption">
               차단되어 전송 본문이 저장되지 않았습니다.
             </p>
@@ -512,7 +572,7 @@ onMounted(async () => {
           <!-- 2. 규칙 판정 (결정) — CONFIRMED이므로 ACCEPT/REJECT를 노출하지 않는다 (D6) -->
           <section class="section">
             <h3 class="section-title">
-              규칙 판정 <span class="tag decision">결정</span>
+              규칙 판정
             </h3>
             <p v-if="ruleFindings.length === 0" class="empty caption">매칭된 규칙이 없습니다.</p>
             <ul v-else class="rules">
@@ -535,7 +595,7 @@ onMounted(async () => {
           <!-- 3. AI 제안 (후보) — SUGGESTED에만 버튼 -->
           <section class="section">
             <h3 class="section-title">
-              AI 제안 <span class="tag candidate">후보</span>
+              AI 판정
               <span class="caption ai-status">{{ term(AI_STATUS_TERMS, detail.aiStatus, '') }}</span>
             </h3>
 
@@ -694,6 +754,53 @@ th {
   background: var(--card);
 }
 
+.seq {
+  color: var(--gray);
+  font-variant-numeric: tabular-nums;
+  width: 44px;
+}
+.seq-answer {
+  color: var(--navy);
+  font-size: 15px;
+}
+.seq-badge {
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pass-note {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-left: 3px solid #2f7d54;
+  border-radius: 8px;
+  background: #e7f4ec;
+  color: #1c6b3f;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.qa-block {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f6f7f9;
+}
+.qa-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--gray);
+  font-size: 12px;
+}
+.qa-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--navy);
+  white-space: pre-wrap;
+}
 .phase-tag {
   display: inline-block;
   margin-left: 6px;

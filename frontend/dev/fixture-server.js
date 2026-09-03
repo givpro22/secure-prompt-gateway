@@ -526,6 +526,7 @@ export function createFixtureState() {
     settleAi(inspection)
     return {
       inspectionId: inspection.inspectionId,
+      messageId: inspection.messageId,
       phase: inspection.phase,
       createdAt: inspection.createdAt,
       department: inspection.user.department,
@@ -542,7 +543,11 @@ export function createFixtureState() {
   function toDetail(inspection) {
     settleAi(inspection)
     const { _deptId, _text, _aiReadyAt, _forceAiStatus, ...rest } = inspection
-    return rest
+    // 답변 검사면 무엇에 대한 답인지 — 같은 메시지의 프롬프트 검사가 보낸 마스킹본
+    const source = inspection.phase === 'OUTPUT'
+      ? [...inspections.values()].find((i) => i.messageId === inspection.messageId && i.phase === 'INPUT')
+      : null
+    return { ...rest, promptText: source ? source.submittedText : null }
   }
 
   // ── 감사 로그 시드 ────────────────────────────────────────────
@@ -893,9 +898,9 @@ export function fixtureServer() {
               // 코드 질문이면 모델이 하듯 고친 코드를 통째로 돌려준다 — 그게 코드 되돌림 검사가 잡는 장면이다.
               const synthetic = looksLikeCode
                 ? `문제가 될 만한 곳을 고쳤습니다.\n\n${masked.split('\n').filter((l) => /[;{}()]/.test(l)).join('\n')}\n\nnull 가능성이 있는 값은 기본값으로 막았습니다.`
+                // 일반 질문은 깨끗하게 답한다 — 시연 기본 경로는 통과다. 유출 의심은 코드 질문(되돌림)으로 보인다.
                 : `요청하신 내용을 정리했습니다.\n\n"${masked}"\n\n` +
-                  `대괄호로 가려진 부분은 그대로 두었습니다. ` +
-                  `추가 확인은 담당자 010-2000-3000 으로 연락 주시면 됩니다.`
+                  `대괄호로 가려진 부분은 그대로 두었습니다. 더 필요한 항목이 있으면 말씀해 주세요.`
               const out = state.createResponseInspection(source, synthetic)
               const verdict = {
                 messageId, inspectionId: out.inspectionId, decision: out.finalDecision,
