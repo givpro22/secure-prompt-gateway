@@ -53,6 +53,18 @@ public class UnmaskController {
         return unmaskService.mine(messageId, userId);
     }
 
+    /**
+     * 내가 올린 요청 전부. 확정 결과를 요청자에게 돌려주는 길이다.
+     *
+     * <p>담당자 목록({@code /unmask-requests})과 경로를 나눈 이유는 싣는 것이 다르기
+     * 때문이다. 이쪽에는 원문이 없다.
+     */
+    @GetMapping("/unmask-requests/mine")
+    public java.util.Map<String, Object> mineAll(@CurrentUserId Long userId) {
+        java.util.List<UnmaskRequestDto> items = unmaskService.mineAll(userId);
+        return java.util.Map.of("items", items, "total", items.size());
+    }
+
     @GetMapping("/unmask-requests")
     public PageEnvelope<UnmaskRequestDto> list(@CurrentUserId Long userId,
                                                @RequestParam(value = "status", required = false) String status,

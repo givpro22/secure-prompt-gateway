@@ -4,7 +4,6 @@ import { fetchAnswerAvailable, requestAnswer, submitResponse } from '../api/mess
 import { requestUnmask } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
-import { useThreadStore } from '../stores/thread'
 import LlmPicker from './LlmPicker.vue'
 import MaskedText from './MaskedText.vue'
 import StatusBadge from './StatusBadge.vue'
@@ -209,7 +208,6 @@ async function sendToSelected() {
 const isAllow = computed(() => props.verdict.decision === 'ALLOW')
 const isBlock = computed(() => props.verdict.decision === 'BLOCK')
 const session = useSessionStore()
-const thread = useThreadStore()
 const notifications = useNotificationStore()
 
 const isMask = computed(() => props.verdict.decision === 'MASK')
@@ -403,25 +401,20 @@ async function submitAsk() {
     requested.value = await requestUnmask(props.verdict.messageId, text)
     asking.value = false
     /*
-     * 어느 발화에 대한 요청인지 함께 남긴다. 알림함이 계정 단위라 세션을 여럿 돌리고
-     * 나면 "마스킹 검토를 요청했습니다"만으로는 어느 건인지 알 수 없다.
+     * 알림함에 바로 한 줄 남긴다. 종이 6초마다 자기 건을 훑어 같은 줄을 만들지만,
+     * 그때까지 아무 일도 없으면 요청이 갔는지 알 수 없다.
+     *
+     * 키를 종과 똑같이 맞춘다 — 어긋나면 같은 요청이 두 줄로 뜬다. 확정이 나면 종이
+     * 이 줄의 잠금을 풀고 그 아래 결과를 붙인다 (D25).
      */
     const label = shortTitle(props.originalText)
-    notifications.push(session.currentUserId, {
+    notifications.pushOnce(session.currentUserId, `asked:${requested.value.requestId}`, {
+      pending: true,
+      watchKey: `asked:${requested.value.requestId}`,
       tone: 'request',
       kind: '검토 요청',
-      title: `${label} — 마스킹 검토를 요청했습니다`,
+      title: `${label} — 마스킹 검토를 기다리는 중입니다`,
       body: text,
-    })
-    // 확정이 나면 이 계정 알림함으로 돌아온다. 목록 API는 담당자 전용이라 요청자는
-    // 자기 건을 직접 물어야 한다 (D25).
-    notifications.watch(session.currentUserId, {
-      key: `unmask:${props.verdict.messageId}`,
-      kind: 'unmask',
-      messageId: props.verdict.messageId,
-      // 알림에서 이 대화로 돌아올 좌표. 대화가 캐시에 없을 때 쓰는 대비책이다.
-      sessionId: thread.activeId,
-      title: label,
     })
   } catch (err) {
     requestError.value =

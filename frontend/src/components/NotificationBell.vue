@@ -15,11 +15,12 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchInspection, fetchInspections } from '../api/inspections'
-import { fetchMyUnmaskRequest, fetchUnmaskRequests } from '../api/unmask'
+import { fetchMyUnmaskRequests, fetchUnmaskRequests } from '../api/unmask'
 import { findByInspection, findByMessage, sessionDecision } from '../stores/conversationCache'
 import { useNotificationStore } from '../stores/notifications'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
+import { shortTitle } from '../lib/text'
 
 const session = useSessionStore()
 const notifications = useNotificationStore()
@@ -132,13 +133,21 @@ const ANSWER_OUTCOME = {
  */
 async function pollOutcome() {
   const userId = session.currentUserId
+
+  // 해제 요청은 목록으로 묻는다. 화면이 기억하지 못하는 건도 여기 잡힌다.
+  try {
+    await settleUnmaskAll(userId)
+  } catch {
+    // 잠깐 실패한 것이다. 다음 차례에 다시 묻는다.
+  }
+
   const watching = notifications.byUser[userId]?.watching ?? []
   for (const w of [...watching]) {
+    if (w.kind !== 'review') continue
     try {
-      if (w.kind === 'review') await settleReview(userId, w)
-      else await settleUnmask(userId, w)
+      await settleReview(userId, w)
     } catch {
-      // 아직 없거나 잠깐 실패한 것이다. 다음 차례에 다시 묻는다.
+      // 아직 없거나 잠깐 실패한 것이다.
     }
   }
 }
@@ -188,29 +197,60 @@ async function settleReview(userId, w) {
   notifications.unwatch(userId, w.key)
 }
 
-async function settleUnmask(userId, w) {
-  const row = await fetchMyUnmaskRequest(w.messageId)
-  if (row.status === 'PENDING') return
+/*
+ * 내가 올린 해제 요청을 통째로 훑는다.
+ *
+ * 예전에는 화면이 기억하는 messageId만 하나씩 물었다. 그러면 이번 창에서 직접 올린
+ * 요청만 결과를 받는다 — 새로고침했거나, 시연용으로 미리 심어 둔 건이거나, 다른
+ * 자리에서 올린 요청은 담당자가 확정해도 요청자에게 아무 일도 일어나지 않았다.
+ *
+ * 아직 대기 중인 건은 알림함에 한 줄로 남겨 둔다. 기다리는 중이라는 것 자체가
+ * 요청자가 알아야 할 상태이고, 그 줄이 있어야 확정됐을 때 무엇이 바뀐 것인지 읽힌다.
+ */
+async function settleUnmaskAll(userId) {
+  const page = await fetchMyUnmaskRequests()
+  // 아직 열려 있는 건의 키. 여기서 빠진 알림은 확정된 것이라 지울 수 있게 푼다.
+  const alive = []
+  for (const row of page.items ?? []) {
+    const found = findByMessage(row.messageId)
+    const label = found ? shortTitle(found.entry.inputText) : `#${row.messageId}`
 
-  const o = UNMASK_OUTCOME[row.status]
-  // 판정 카드가 확정 결과를 그린다. 요청만 하고 결과를 모르는 화면이 남지 않게.
-  const found = findByMessage(w.messageId)
-  if (found) found.entry.unmask = row
+    if (row.status === 'PENDING') {
+      alive.push(`asked:${row.requestId}`)
+      notifications.pushOnce(userId, `asked:${row.requestId}`, {
+        pending: true,
+        watchKey: `asked:${row.requestId}`,
+        tone: 'request',
+        kind: '검토 요청',
+        title: `${label} — 마스킹 검토를 기다리는 중입니다`,
+        body: row.reason,
+      })
+      continue
+    }
 
-  notifications.pushOnce(userId, `outcome:${row.requestId}`, {
-    tone: o.tone,
-    kind: o.kind,
-    title: `${w.title} — ${o.verb}`,
-    body: row.decisionNote
-      ? `${row.decidedBy}: ${row.decisionNote}`
-      : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
-    linkLabel: '대화에서 보기',
-    goSession: found?.sessionId ?? w.sessionId ?? null,
-    goTurn: found?.entry?.key ?? null,
-  })
+    const o = UNMASK_OUTCOME[row.status]
+    if (!o) continue
+    // 판정 카드가 확정 결과를 그린다. 요청만 하고 결과를 모르는 화면이 남지 않게.
+    if (found) found.entry.unmask = row
 
-  notifications.settle(userId, [])
-  notifications.unwatch(userId, w.key)
+    notifications.pushOnce(userId, `outcome:${row.requestId}`, {
+      tone: o.tone,
+      kind: o.kind,
+      title: `${label} — ${o.verb}`,
+      body: row.decisionNote
+        ? `${row.decidedBy}: ${row.decisionNote}`
+        : `${row.decidedBy} 확정. 이미 전송된 본문은 그대로입니다.`,
+      linkLabel: found ? '대화에서 보기' : null,
+      goSession: found?.sessionId ?? null,
+      goTurn: found?.entry?.key ?? null,
+    })
+  }
+
+  /*
+   * 확정이 난 건의 "기다리는 중" 줄은 잠금을 푼다. 지울 수 있어야 하고, 남아 있어도
+   * 그 아래 확정 알림이 지금 상태를 말한다.
+   */
+  notifications.settle(userId, alive)
 }
 
 /*
