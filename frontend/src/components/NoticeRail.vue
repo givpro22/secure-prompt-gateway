@@ -47,6 +47,13 @@ const notices = computed(() => {
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 })
 
+/*
+ * 정책 세트 리비전. 빌드 시점에 마이그레이션 개수를 세어 넣는다(vite.config.js).
+ * 정책·규칙이 바뀔 때마다 마이그레이션이 하나 늘고 그게 커밋 하나라, 이 숫자는
+ * 커밋 이력을 따라간다. 개별 정책의 version(P-PII v5)과는 다른 축이다.
+ */
+const revision = __POLICY_REVISION__
+
 const baseDate = computed(() => {
   const dates = session.policies.map((p) => p.registeredAt).filter(Boolean)
   return dates.length === 0 ? null : dates.slice().sort().at(-1)
@@ -72,7 +79,16 @@ const baseDate = computed(() => {
       </li>
     </ul>
 
-    <footer v-if="baseDate" class="base">정책 기준 {{ baseDate }}</footer>
+    <footer class="base">
+      <span class="base-row">
+        <span class="base-key">정책 버전</span>
+        <span class="base-val">v{{ revision }}</span>
+      </span>
+      <span v-if="baseDate" class="base-row">
+        <span class="base-key">기준일</span>
+        <span class="base-val">{{ baseDate }}</span>
+      </span>
+    </footer>
   </aside>
 </template>
 
@@ -87,9 +103,8 @@ const baseDate = computed(() => {
   flex-direction: column;
   gap: 4px;
   /* 목록이 길어져도 "정책 기준"이 잘리지 않게 레일이 스스로 스크롤한다. */
-  position: sticky;
-  top: 0;
-  max-height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 h2 {
@@ -187,11 +202,25 @@ h2 {
 
 .base {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--border-strong);
   font-size: 11.5px;
   color: var(--gray);
   font-variant-numeric: tabular-nums;
+}
+
+.base-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.base-val {
+  color: var(--navy);
+  font-weight: 600;
 }
 </style>

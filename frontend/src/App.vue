@@ -30,10 +30,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/*
+ * 화면 전체를 뷰포트에 가둔다. 예전엔 calc(100vh - var(--header-h))로 본문 높이를
+ * 잡았는데 헤더가 그 토큰보다 커져서 아래가 잘렸다. 헤더 높이를 상수로 가정하지 않고
+ * flex로 남는 만큼 준다.
+ */
 .shell {
   display: flex;
-  align-items: flex-start;
-  min-height: 100vh;
+  align-items: stretch;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .column {
@@ -41,12 +47,14 @@ onMounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 main {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .load-error {
