@@ -23,7 +23,12 @@ import org.springframework.stereotype.Component;
 public class MockLeakInspector implements AnswerLeakInspector {
 
     static final String CODE = "LEAK-INTERNAL-CONTEXT";
-    private static final List<String> MARKERS = List.of("사내", "내부", "미공개", "대외비", "nda", "엠바고", "런칭 일정");
+    /*
+     * "사내"·"내부"는 뺐다. 배포에서 깨끗한 온보딩 답변이 "사내 메신저" 한 마디로 검토 대기가
+     * 됐다 — 한국어 업무 문장에 너무 흔한 말이라 표지어가 못 된다. 남긴 것은 그 말이 있으면
+     * 거의 항상 밖에 나가면 안 되는 것들이다.
+     */
+    private static final List<String> MARKERS = List.of("대외비", "미공개", "기밀", "nda", "엠바고", "런칭 일정");
 
     @Override
     public AiAssessment check(String original, String masked, String answer, String departmentCode) {
@@ -46,7 +51,7 @@ public class MockLeakInspector implements AnswerLeakInspector {
         }
         return new AiAssessment(List.of(new AiAssessment.RiskCandidate(
                 CODE, "CONFIDENTIAL",
-                "답변이 사내 맥락을 가리키는 표현과 함께 구체 정보를 담고 있습니다. (Mock 검사기 — 사내 모델이 들어오면 문맥 판단으로 대체됩니다)",
+                "답변이 대외비·미공개 같은 표현과 함께 구체 정보를 담고 있습니다. (Mock 검사기 — 사내 모델이 들어오면 문맥 판단으로 대체됩니다)",
                 evidence)), List.of("mock-leak-inspector"), true);
     }
 }
