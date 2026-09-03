@@ -27,6 +27,43 @@ const USERS = [
 ]
 
 /**
+ * 고객 명단. 백엔드의 customer 테이블에 대응한다 — 전부 합성이다.
+ * ROSTER 규칙은 정규식을 갖지 않고 이 목록에서 판정 직전에 펼쳐진다.
+ */
+const CUSTOMERS = [
+  { name: '강도현', givenName: '도현', company: '대한물산' },
+  { name: '고은비', givenName: '은비', company: '대한물산' },
+  { name: '권나윤', givenName: '나윤', company: '세영테크' },
+  { name: '김서준', givenName: '서준', company: '세영테크' },
+  { name: '남우진', givenName: '우진', company: '세영테크' },
+  { name: '노하람', givenName: '하람', company: '한빛리테일' },
+  { name: '문지후', givenName: '지후', company: '한빛리테일' },
+  { name: '박예린', givenName: '예린', company: '금강에너지' },
+  { name: '배시우', givenName: '시우', company: '금강에너지' },
+  { name: '서채원', givenName: '채원', company: '금강에너지' },
+  { name: '손유찬', givenName: '유찬', company: '동방해운' },
+  { name: '신소율', givenName: '소율', company: '동방해운' },
+  { name: '안건우', givenName: '건우', company: '누리소프트' },
+  { name: '양다인', givenName: '다인', company: '누리소프트' },
+  { name: '오태윤', givenName: '태윤', company: '누리소프트' },
+  { name: '유하준', givenName: '하준', company: '백양제약' },
+  { name: '윤서아', givenName: '서아', company: '백양제약' },
+  { name: '이민재', givenName: '민재', company: '태산건설' },
+  { name: '장준서', givenName: '준서', company: '태산건설' },
+  { name: '전지안', givenName: '지안', company: '태산건설' },
+  { name: '조현우', givenName: '현우', company: '오름식품' },
+  { name: '최수아', givenName: '수아', company: '오름식품' },
+  { name: '한연우', givenName: '연우', company: '성진기계' },
+  { name: '황도윤', givenName: '도윤', company: '성진기계' },
+]
+
+/** 앞뒤 한글 경계로 '서준이가'의 서준, '우진공업'의 우진 같은 접사 결합을 거른다. */
+function rosterPattern(field) {
+  const names = [...new Set(CUSTOMERS.map((c) => c[field]))].sort()
+  return new RegExp(`(?<![가-힣])(?:${names.join('|')})(?![가-힣])`, 'g')
+}
+
+/**
  * 기획서 7.2 규칙 8종 + P-EMBARGO 2종 (결정 4).
  *
  * `embargoUntil`은 **해제일**이다. 차단 조건은 today < embargoUntil이며 경계일 당일은
@@ -84,6 +121,17 @@ const RULES = [
     severity: 'HIGH', obligation: 'LEGAL', source: '개인정보보호법', description: '계좌번호. 금융 문맥이 있을 때만 탐지',
   },
   {
+    ruleId: 13, code: 'PII-CUST-07', policyCode: 'P-PII', ruleType: 'REGEX',
+    pattern: rosterPattern('name'), action: 'MASK', maskLabel: '[고객명]',
+    severity: 'HIGH', obligation: 'LEGAL', source: '개인정보보호법', description: '고객 명단 전체 일치',
+  },
+  {
+    // 성을 뗀 이름은 동음 명사와 겹칠 수 있어 마스킹까지 가지 않고 검토로 보낸다.
+    ruleId: 14, code: 'PII-CUST-08', policyCode: 'P-PII', ruleType: 'REGEX',
+    pattern: rosterPattern('givenName'), action: 'REVIEW', maskLabel: null,
+    severity: 'LOW', obligation: 'LEGAL', source: '개인정보보호법', description: '고객 명단의 이름 부분만 일치. 실명 의심',
+  },
+  {
     ruleId: 8, code: 'CONF-CLIENT-01', policyCode: 'P-CONF', ruleType: 'KEYWORD',
     keywords: ['A사', 'B사', 'C사', '프로젝트 오메가', '차세대'], action: 'REVIEW', maskLabel: null,
     severity: 'MEDIUM', obligation: 'INTERNAL', source: '고객사 NDA 목록 v3', description: '고객사명·프로젝트명 언급 시 검토',
@@ -103,7 +151,7 @@ const RULES = [
 ]
 
 const POLICIES = [
-  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 4, scope: 'GLOBAL', ownerDept: '정보보안팀' },
+  { policyId: 1, code: 'P-PII', name: '개인정보 보호', category: 'PII', version: 5, scope: 'GLOBAL', ownerDept: '정보보안팀' },
   { policyId: 2, code: 'P-SEC', name: '자격증명·인프라 정보 보호', category: 'SECRET', version: 7, scope: 'GLOBAL', ownerDept: '정보보안팀' },
   { policyId: 3, code: 'P-CONF', name: '고객사 프로젝트 정보 통제', category: 'CONFIDENTIAL', version: 2, scope: 'DEPT', ownerDept: '정보보안팀' },
   { policyId: 4, code: 'P-EMBARGO', name: '보도자료 엠바고', category: 'EMBARGO', version: 1, scope: 'DEPT', ownerDept: '홍보팀' },

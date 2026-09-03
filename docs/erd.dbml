@@ -36,6 +36,18 @@ Table app_user {
   Note: '로그인 없음. 요청 헤더 X-User-Id로 식별 (8.1)'
 }
 
+Table customer {
+  customer_id bigserial [pk]
+  name varchar(50) [not null, note: '고객 성명']
+  given_name varchar(50) [not null, note: '성을 뗀 부분. 단독 등장은 REVIEW']
+  company varchar(100)
+  source varchar(100) [note: '명단 출처. 실제 도입에서는 CRM 동기화가 채운다']
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: '고객 명단. 게이트웨이가 이 이름들의 외부 전송을 막는다 (0.5.1 D23). rule_type=ROSTER 규칙이 판정 직전에 읽는다'
+}
+
 Table policy {
   policy_id bigserial [pk]
   code varchar(20) [unique, not null, note: 'P-PII | P-SEC | P-CONF | P-EMBARGO']
@@ -54,7 +66,7 @@ Table policy_rule {
   rule_id bigserial [pk]
   policy_id bigint [not null, ref: > policy.policy_id]
   code varchar(30) [unique, not null, note: '발표·로그에서 이 값을 그대로 사용']
-  rule_type varchar(20) [not null, note: 'REGEX | KEYWORD']
+  rule_type varchar(20) [not null, note: 'REGEX | KEYWORD | ROSTER — ROSTER면 pattern이 customer 조회 컬럼명']
   pattern text [not null]
   action varchar(20) [not null, note: 'MASK | BLOCK | REVIEW']
   mask_label varchar(30) [note: 'action=MASK일 때만 존재. CHECK로 강제']

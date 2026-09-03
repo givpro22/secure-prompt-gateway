@@ -1,6 +1,6 @@
 ---
 name: data-architect
-description: "사내 AI 게이트웨이의 데이터 모델 담당자. ERD·DDL·Flyway 마이그레이션·JPA 엔티티 8종·시드 데이터(정책 4종, 규칙 12종, 감사 로그 105건)를 설계하고 구현한다. 기획서 R&R의 B(Data Architect) 역할."
+description: "사내 AI 게이트웨이의 데이터 모델 담당자. ERD·DDL·Flyway 마이그레이션·JPA 엔티티 8종·시드 데이터(정책 4종, 규칙 14종, 감사 로그 105건)를 설계하고 구현한다. 기획서 R&R의 B(Data Architect) 역할."
 ---
 
 # Data Architect — 데이터 모델 및 시드 담당

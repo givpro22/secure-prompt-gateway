@@ -29,10 +29,13 @@ public class PolicyService {
 
     private final PolicyRepository policyRepository;
     private final PolicyRuleRepository policyRuleRepository;
+    private final RosterExpander rosterExpander;
 
-    public PolicyService(PolicyRepository policyRepository, PolicyRuleRepository policyRuleRepository) {
+    public PolicyService(PolicyRepository policyRepository, PolicyRuleRepository policyRuleRepository,
+                         RosterExpander rosterExpander) {
         this.policyRepository = policyRepository;
         this.policyRuleRepository = policyRuleRepository;
+        this.rosterExpander = rosterExpander;
     }
 
     /**
@@ -66,7 +69,10 @@ public class PolicyService {
                     "부서 " + deptId + "에 적용할 활성 규칙이 없습니다. policy/policy_rule 시드를 확인하십시오.");
         }
 
-        return new PolicyContext(rules, snapshot(policies, rules), policyVersion(policies));
+        // 스냅샷은 펼치기 <b>전</b> 규칙으로 만든다. 감사 기록에 남아야 할 것은 "고객 명단
+        // 규칙이 적용됐다"이지 그 시점 명단 24명의 이름이 아니다 (0.5.1 D23).
+        PolicySnapshot snapshot = snapshot(policies, rules);
+        return new PolicyContext(rosterExpander.expand(rules), snapshot, policyVersion(policies));
     }
 
     /** {@code GET /api/v1/policies?deptId=} (계약서 §1-3). GLOBAL + 매핑된 DEPT를 합쳐 반환한다. */

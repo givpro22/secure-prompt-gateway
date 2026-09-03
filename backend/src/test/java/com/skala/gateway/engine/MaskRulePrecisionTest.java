@@ -6,6 +6,7 @@ import com.skala.gateway.DemoCases;
 import com.skala.gateway.domain.PolicyRule;
 import com.skala.gateway.domain.enums.FinalDecision;
 import com.skala.gateway.domain.repository.PolicyRuleRepository;
+import com.skala.gateway.service.RosterExpander;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,9 +34,12 @@ class MaskRulePrecisionTest {
     @Autowired
     private PolicyRuleRepository policyRuleRepository;
 
+    @Autowired
+    private RosterExpander rosterExpander;
+
     /** 인사팀(HR)은 PII 6종이 전부 적용되고 엠바고는 매핑되지 않아 잡음이 없다. */
     private List<PolicyRule> rules() {
-        return policyRuleRepository.findActiveByDept(DemoCases.DEPT_HR);
+        return rosterExpander.expand(policyRuleRepository.findActiveByDept(DemoCases.DEPT_HR));
     }
 
     private EngineVerdict eval(String text) {
