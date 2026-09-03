@@ -14,7 +14,11 @@ export const useThreadStore = defineStore('thread', {
     items: [],
     /** ChatView가 감시하는 초기화 신호. 증가하면 대화를 비운다 */
     clearedAt: 0,
-    /** 사이드바에서 고른 문장을 입력창으로 옮기는 통로. ChatView가 감시한다 */
+    /**
+     * 사이드바에서 고른 문장을 입력창으로 옮기는 통로. ChatView가 감시한다.
+     * `send`가 true면 그대로 전송까지 한다 — 완료된 대화를 여는 것처럼 보이게 하되
+     * 판정은 실제로 규칙 엔진이 낸다. 가짜 판정 객체를 화면에 심지 않는다.
+     */
     pendingDraft: null,
   }),
   actions: {
@@ -25,8 +29,8 @@ export const useThreadStore = defineStore('thread', {
       const found = this.items.find((i) => i.key === key)
       if (found) found.decision = decision
     },
-    requestDraft(text) {
-      this.pendingDraft = { text, at: Date.now() }
+    requestDraft(text, { send = false } = {}) {
+      this.pendingDraft = { text, send, at: Date.now() }
     },
     clear() {
       this.items = []

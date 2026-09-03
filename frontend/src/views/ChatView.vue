@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AiCandidateList from '../components/AiCandidateList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
 import MessageInput from '../components/MessageInput.vue'
@@ -7,7 +7,6 @@ import PendingIndicator from '../components/PendingIndicator.vue'
 import ModelChip from '../components/ModelChip.vue'
 import PolicyCaption from '../components/PolicyCaption.vue'
 import NoticeRail from '../components/NoticeRail.vue'
-import ScenarioCards from '../components/ScenarioCards.vue'
 import SessionTally from '../components/SessionTally.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import VerdictCard from '../components/VerdictCard.vue'
@@ -16,6 +15,7 @@ import { submitMessage } from '../api/messages'
 import { POLL_MAX_ATTEMPTS, usePolling } from '../composables/usePolling'
 import { errorText, expectField } from '../lib/contract'
 import { DECIDED_BY_TERMS, term } from '../lib/terms'
+import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 
 /*
@@ -29,7 +29,15 @@ import { useThreadStore } from '../stores/thread'
  */
 
 const thread = useThreadStore()
+const session = useSessionStore()
 const draft = ref('')
+
+/*
+ * 빈 화면에서는 입력창이 가운데, 대화가 시작되면 아래로 내려간다.
+ * justify-content는 애니메이션이 안 되므로 입력창 아래 여백의 flex-grow를 1에서 0으로
+ * 줄인다 — 그건 보간되므로 입력창이 실제로 미끄러져 내려간다.
+ */
+const started = computed(() => entries.value.length > 0)
 
 // 사이드바의 "새 대화" — 대화를 비운다. 영속화가 없으므로 화면 상태만 지우면 된다.
 watch(
@@ -41,11 +49,16 @@ watch(
   },
 )
 
-// 사이드바의 (demo) 이력을 누르면 그 문장이 입력창으로 온다.
+// 사이드바의 (demo) 이력. 완료된 대화는 그대로 태워서 답변까지 보이게 하고,
+// 작성 중 항목은 입력창만 복원한다.
 watch(
   () => thread.pendingDraft,
-  (picked) => {
-    if (picked) draft.value = picked.text
+  async (picked) => {
+    if (!picked) return
+    draft.value = picked.text
+    if (!picked.send) return
+    await nextTick()
+    if (!sending.value) send()
   },
 )
 const sending = ref(false)
@@ -191,17 +204,22 @@ function isHumanDecided(entry) {
 
 <template>
   <div class="layout">
-  <div class="chat">
+  <div class="chat" :class="{ started }">
     <p v-if="banner" class="banner">{{ banner }}</p>
 
     <SessionTally :entries="entries" />
 
     <section class="thread">
-      <!-- S1 초기 — 빈 화면 대신 데모 케이스를 버튼으로 놓는다 -->
-      <div v-if="entries.length === 0" class="empty">
-        <p class="lead">프롬프트를 입력해 전송하면 사내 정책에 따라 검사한 결과를 보여 줍니다.</p>
-        <ScenarioCards @pick="draft = $event" />
-      </div>
+      <!-- S1 초기 — 인사말만. 입력창이 가운데 있다가 대화가 시작되면 내려간다 -->
+      <Transition name="greet">
+        <div v-if="!started" class="empty">
+          <h2 class="hello">안녕하세요, {{ session.currentUser?.name ?? '' }} 님</h2>
+          <p class="lead">
+            무엇이든 물어보세요. 보내기 전에 {{ session.currentDeptName }} 정책으로 검사하고,
+            판정과 근거를 기록으로 남깁니다.
+          </p>
+        </div>
+      </Transition>
 
       <article v-for="entry in entries" :id="`turn-${entry.key}`" :key="entry.key" class="turn">
         <!--
@@ -284,6 +302,9 @@ function isHumanDecided(entry) {
         <PolicyCaption />
       </div>
     </footer>
+
+    <!-- 입력창을 가운데로 밀어 올리는 여백. 대화가 시작되면 0으로 줄며 내려간다 -->
+    <div class="tail" aria-hidden="true" />
   </div>
   <NoticeRail />
   </div>
@@ -307,12 +328,74 @@ function isHumanDecided(entry) {
   padding: 20px 16px 24px;
 }
 
+.thread {
+  flex: none;
+  /* 인사말이 빠질 때 absolute로 떠서 자리를 즉시 비우지 않게 한다 */
+  position: relative;
+}
+
+.chat.started .thread {
+  flex: 1;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.hello {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
 .empty .lead {
   margin: 0;
-  padding: 26px 0 0;
-  text-align: center;
-  font-size: var(--font-caption);
+  max-width: 44ch;
+  font-size: 13px;
+  line-height: 1.7;
   color: var(--gray);
+}
+
+/* 입력창을 가운데로 밀어 올리는 여백. flex-grow는 보간되므로 실제로 미끄러진다 */
+.tail {
+  flex-grow: 1;
+  transition: flex-grow 460ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.chat.started .tail {
+  flex-grow: 0;
+}
+
+.greet-enter-active,
+.greet-leave-active {
+  transition: opacity 260ms ease, transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.greet-enter-from,
+.greet-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.greet-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tail,
+  .greet-enter-active,
+  .greet-leave-active {
+    transition: none;
+  }
 }
 
 .composer-meta {

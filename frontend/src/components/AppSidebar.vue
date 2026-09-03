@@ -26,7 +26,20 @@ const router = useRouter()
  */
 const DEMO_HISTORY = [
   {
+    group: '작성 중',
+    kind: 'draft',
+    items: [
+      {
+        key: 'w1',
+        decision: null,
+        text: '분기 보고서 개요',
+        prompt: '3분기 실적 보고서 개요 잡아줘. 매출·이슈·다음 분기 계획 순서로.',
+      },
+    ],
+  },
+  {
     group: '오늘',
+    kind: 'done',
     items: [
       { key: 'd1', decision: 'ALLOW', text: '고객 응대 이메일 문구', prompt: '고객 응대 이메일 문구를 정중한 톤으로 다듬어줘.' },
       { key: 'd2', decision: 'MASK', text: '환불 요청 정리', prompt: '환불 요청 건 정리해줘. 담당자 연락처 010-1234-5678 포함해서.' },
@@ -35,15 +48,21 @@ const DEMO_HISTORY = [
   },
   {
     group: '어제',
+    kind: 'done',
     items: [
-      { key: 'd4', decision: 'PENDING', text: 'B사 계약 갱신 안내', prompt: 'B사 차세대 프로젝트 계약 갱신 안내문 초안 잡아줘.' },
+      { key: 'd4', decision: 'MASK', text: '고객 안내 발송 명단', prompt: '담당자 김서준 고객님과 박예린 고객님께 안내 문자 보내줘.' },
       { key: 'd5', decision: 'ALLOW', text: 'FAQ 초안', prompt: '자주 묻는 질문 FAQ 초안 10개만 뽑아줘.' },
     ],
   },
 ]
 
-function pickDemo(item) {
-  thread.requestDraft(item.prompt)
+/*
+ * 완료된 대화는 눌렀을 때 답변까지 보여야 한다. 판정 객체를 화면에 심지 않고
+ * 실제로 한 번 태운다 — 규칙 엔진이 낸 판정이라야 화면과 감사 기록이 어긋나지 않는다.
+ * 작성 중 항목은 전송하지 않고 입력창만 복원한다.
+ */
+function pickDemo(item, kind) {
+  thread.requestDraft(item.prompt, { send: kind === 'done' })
   if (router.currentRoute.value.name !== 'chat') router.push('/chat')
 }
 
@@ -103,8 +122,12 @@ function token(decision) {
         <h2>{{ block.group }}</h2>
         <ul>
           <li v-for="item in block.items" :key="item.key">
-            <button type="button" class="history-item" @click="pickDemo(item)">
-              <span class="dot" :class="`t-${token(item.decision)}`" aria-hidden="true" />
+            <button type="button" class="history-item" @click="pickDemo(item, block.kind)">
+              <span
+                class="dot"
+                :class="block.kind === 'draft' ? 'writing' : `t-${token(item.decision)}`"
+                aria-hidden="true"
+              />
               <span class="text">{{ item.text }}</span>
               <span class="demo">(demo)</span>
             </button>
@@ -281,6 +304,12 @@ function token(decision) {
 }
 .t-purple {
   background: #a78bde;
+}
+
+/* 작성 중 — 판정이 아직 없다. 채우지 않고 테두리만 둔다 */
+.dot.writing {
+  background: transparent;
+  border: 1.5px solid var(--nav-muted);
 }
 
 .demo {
