@@ -80,6 +80,10 @@ INSERT INTO policy_rule
 
 -- P-PII의 규칙이 4종에서 6종이 되었다. 정책 버전을 올려 판정 스냅샷이 시점을 구분하게 한다.
 -- 이 값을 올리지 않으면 어제의 판정과 오늘의 판정이 같은 근거를 가리키게 되어 감사가 거짓이 된다.
-UPDATE policy SET version = version + 1 WHERE code = 'P-PII';
+--
+-- `version + 1`이 아니라 명시값을 쓴다. 상대 증가는 마이그레이션 시점의 DB 상태에 결과가
+-- 달라지는데, 계약 확정본·api-spec·ai-prompt·픽스처가 전부 `P-PII:4`를 예시로 박아 두었다.
+-- 시드 값은 어느 DB에서 돌리든 같아야 한다 — V3의 PK 충돌(PR #2)이 같은 뿌리의 문제였다.
+UPDATE policy SET version = 4 WHERE code = 'P-PII';
 
 SELECT setval(pg_get_serial_sequence('policy_rule', 'rule_id'), (SELECT max(rule_id) FROM policy_rule));
