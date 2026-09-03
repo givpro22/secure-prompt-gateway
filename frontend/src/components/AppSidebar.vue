@@ -13,6 +13,7 @@ import UserMenu from './UserMenu.vue'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 import { STATUS_TERMS } from '../lib/terms'
+import { computed } from 'vue'
 
 const session = useSessionStore()
 const thread = useThreadStore()
@@ -109,11 +110,34 @@ const DEMO_HISTORY = [
   },
 ]
 
-const DEMO_DRAFT = {
-  key: 'w1',
-  text: '분기 보고서 개요',
-  prompt: '3분기 실적 보고서 개요 잡아줘. 매출·이슈·다음 분기 계획 순서로.',
+/*
+ * 계정별 시연용 작성 중 초안. 부서에 따라 쓰는 말이 다르다는 것을 보여주는 자리다.
+ *
+ * **비어 있는 계정이 둘 있다.** 모두가 뭔가를 쓰다 만 상태로 두면 자리 채우기로
+ * 보인다. 하필 정보보안팀과 홍보팀을 비운 것도 이유가 있다 — 정책을 만드는 쪽이라
+ * 검사받는 프롬프트를 쓰고 있을 자리가 아니다.
+ */
+const DEMO_DRAFTS = {
+  1: {
+    key: 'w-dev',
+    text: '결제 재시도 설계 검토',
+    prompt: '결제 실패 재시도 로직 설계 검토해줘. 백오프 간격이랑 상한 어떻게 잡는 게 좋아?',
+  },
+  2: {
+    key: 'w-sales',
+    text: '제안서 요약 초안',
+    prompt: '고객사 제안서 요약 초안 잡아줘. 도입 효과랑 일정 위주로.',
+  },
+  3: {
+    key: 'w-hr',
+    text: '분기 보고서 개요',
+    prompt: '3분기 실적 보고서 개요 잡아줘. 매출·이슈·다음 분기 계획 순서로.',
+  },
 }
+
+const demoDraft = computed(() => DEMO_DRAFTS[session.currentUserId] ?? null)
+
+const isAdmin = computed(() => session.currentUser?.role === 'SECURITY_ADMIN')
 
 /*
  * 데모 대화는 지금 대화를 갈아끼운다. 이어붙이면 서로 다른 세션의 판정이 한 흐름처럼
@@ -124,8 +148,13 @@ function openDemo(item) {
   if (router.currentRoute.value.name !== 'chat') router.push('/chat')
 }
 
-function restoreDraft(text) {
-  thread.requestDraft(text)
+/*
+ * 작성 중을 누르면 **새 대화로 연다.** 지금 대화 뒤에 붙이면 보내지도 않은 문장이
+ * 앞 판정들 아래에 끼어들어, 한 흐름처럼 보인다. 쓰다 만 것은 아직 시작하지 않은
+ * 대화이므로 빈 화면에 입력만 얹은 상태가 맞다.
+ */
+function restoreDraft(text, key) {
+  thread.openDraft(key, text)
   if (router.currentRoute.value.name !== 'chat') router.push('/chat')
 }
 
@@ -156,7 +185,8 @@ function token(decision) {
 
     <nav class="nav">
       <RouterLink to="/chat" class="nav-item">직원 AI 챗</RouterLink>
-      <RouterLink to="/admin/audit" class="nav-item">관리자 감사 콘솔</RouterLink>
+      <!-- 감사 콘솔은 보안 담당자에게만 보인다. 라우터도 같은 조건으로 막는다 -->
+      <RouterLink v-if="isAdmin" to="/admin/audit" class="nav-item">관리자 감사 콘솔</RouterLink>
     </nav>
 
     <div class="scroll">
@@ -182,18 +212,27 @@ function token(decision) {
         <h2>작성 중</h2>
         <ul>
           <li v-if="thread.writing">
-            <button type="button" class="history-item" @click="restoreDraft(thread.writing.text)">
+            <button
+              type="button"
+              class="history-item"
+              @click="restoreDraft(thread.writing.text, 'w-live')"
+            >
               <span class="dot writing" aria-hidden="true" />
               <span class="text">{{ thread.writing.text }}</span>
             </button>
           </li>
-          <li>
-            <button type="button" class="history-item" @click="restoreDraft(DEMO_DRAFT.prompt)">
+          <li v-if="demoDraft">
+            <button
+              type="button"
+              class="history-item"
+              @click="restoreDraft(demoDraft.prompt, demoDraft.key)"
+            >
               <span class="dot writing" aria-hidden="true" />
-              <span class="text">{{ DEMO_DRAFT.text }}</span>
+              <span class="text">{{ demoDraft.text }}</span>
               <span class="demo">(demo)</span>
             </button>
           </li>
+          <li v-if="!thread.writing && !demoDraft" class="none">작성 중인 내용이 없습니다</li>
         </ul>
       </section>
 
@@ -383,6 +422,12 @@ function token(decision) {
 }
 .t-purple {
   background: #a78bde;
+}
+
+.none {
+  padding: 7px 12px;
+  color: var(--nav-fg-dim);
+  font-size: 13px;
 }
 
 /* 작성 중 — 판정이 아직 없다. 채우지 않고 테두리만 둔다 */

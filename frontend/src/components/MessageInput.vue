@@ -12,11 +12,19 @@ defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit'])
 
+/*
+ * Enter로 보내고 Shift+Enter로 줄을 바꾼다. ⌘/Ctrl+Enter도 그대로 둔다 — 손에 익은
+ * 사람이 있고 막을 이유가 없다.
+ *
+ * `isComposing`을 먼저 본다. 한글은 조합 중에도 keydown이 오므로, 이것을 빼면
+ * 글자를 확정하려고 누른 Enter가 전송이 되어 문장이 잘려 나간다.
+ */
 function onKeydown(event) {
-  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-    event.preventDefault()
-    emit('submit')
-  }
+  if (event.key !== 'Enter') return
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.shiftKey) return
+  event.preventDefault()
+  emit('submit')
 }
 </script>
 
@@ -26,7 +34,7 @@ function onKeydown(event) {
       rows="3"
       :value="modelValue"
       :disabled="disabled"
-      placeholder="AI에게 보낼 프롬프트를 입력하세요. (⌘/Ctrl + Enter 전송)"
+      placeholder="AI에게 보낼 프롬프트를 입력하세요. (Enter 전송, Shift + Enter 줄바꿈)"
       @input="emit('update:modelValue', $event.target.value)"
       @keydown="onKeydown"
     />

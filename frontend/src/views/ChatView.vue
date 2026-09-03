@@ -17,6 +17,7 @@ import { errorText, expectField } from '../lib/contract'
 import { DECIDED_BY_TERMS, term } from '../lib/terms'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
+import { notificationFromVerdict, useNotificationStore } from '../stores/notifications'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -29,6 +30,7 @@ import { useThreadStore } from '../stores/thread'
  */
 
 const thread = useThreadStore()
+const notifications = useNotificationStore()
 const session = useSessionStore()
 const draft = ref('')
 
@@ -61,11 +63,22 @@ watch(
   },
 )
 
-// 작성 중 항목 — 입력창만 복원한다.
+/*
+ * 작성 중 항목 — 빈 화면에 입력만 얹는다.
+ *
+ * 예전에는 입력창만 채웠다. 그러면 대화가 이미 있을 때 보내지도 않은 문장이 앞
+ * 판정들 아래에 끼어들어 한 흐름처럼 보인다. 쓰다 만 것은 아직 시작하지 않은
+ * 대화이므로 새 대화와 같은 자리에서 열어야 한다.
+ */
 watch(
   () => thread.pendingDraft,
   (picked) => {
-    if (picked) draft.value = picked.text
+    if (!picked) return
+    entries.value = []
+    ownEntries.value = []
+    showingOwn.value = true
+    banner.value = ''
+    draft.value = picked.text
   },
 )
 
@@ -87,6 +100,7 @@ const replaying = ref(false)
  */
 const ownEntries = ref([])
 
+
 /*
  * 지금 화면이 내 대화인지. 스토어의 `viewing`을 보지 않는 이유가 있다 — 스토어는
  * 사이드바 강조를 위해 값을 먼저 바꿔 두므로, 그것으로 판단하면 되돌리는 쪽이
@@ -96,7 +110,7 @@ const showingOwn = ref(true)
 
 /** 치워 둔 내 대화를 되돌린다. 입력하거나 "이번 세션"을 누를 때 탄다 */
 function restoreOwn() {
-  thread.viewing = 'own'
+  thread.setViewing('own')
   if (showingOwn.value) return
   entries.value = ownEntries.value
   ownEntries.value = []
@@ -153,6 +167,41 @@ const {
 } = usePolling()
 let nextKey = 1
 
+/*
+ * 계정별 대화. 로그인이 없어 계정을 갈아 끼우며 시연하는데(0.3), 한 벌만 두면
+ * 영업팀으로 바꾼 순간 개발팀이 하던 말이 화면에 그대로 남는다. 부서에 따라 판정이
+ * 갈리는 것을 보여주는 자리라 특히 섞이면 안 된다.
+ *
+ * 스토어가 아니라 여기 두는 이유는 entries가 판정 응답 덩어리이기 때문이다. 사이드바가
+ * 읽어야 하는 요약(제목·턴 수·작성 중)만 스토어에 있고, 본문은 화면이 들고 있는다.
+ */
+const convByUser = new Map()
+
+function snapshotConversation() {
+  return {
+    entries: entries.value,
+    ownEntries: ownEntries.value,
+    showingOwn: showingOwn.value,
+    draft: draft.value,
+  }
+}
+
+watch(
+  () => session.currentUserId,
+  (next, prev) => {
+    if (prev != null) convByUser.set(prev, snapshotConversation())
+    const saved = convByUser.get(next)
+    entries.value = saved?.entries ?? []
+    ownEntries.value = saved?.ownEntries ?? []
+    showingOwn.value = saved?.showingOwn ?? true
+    draft.value = saved?.draft ?? ''
+    banner.value = ''
+    thread.useAccount(next)
+    notifications.useAccount(next)
+  },
+  { immediate: true },
+)
+
 /** 상태 코드와 decision이 계약(§1-4)대로 대응하는지 확인한다. */
 function checkDecision(status, verdict) {
   const expected = { 200: ['ALLOW', 'MASK'], 202: ['PENDING'], 403: ['BLOCK'] }[status]
@@ -202,6 +251,10 @@ async function send() {
     // "이번 세션"은 **직접 입력해 답변을 받은 것**만 센다. 데모 대화를 열어보는 것은
     // 지난 대화를 훑는 행동이지 내가 이번에 한 일이 아니다.
     if (!replaying.value) thread.addTurn(text, verdict.decision)
+    // 판정은 알림함에도 한 줄 남는다. 데모 대화를 훑는 것은 내가 이번에 한 일이 아니다.
+    if (!replaying.value) {
+      notifications.push(session.currentUserId, notificationFromVerdict(verdict))
+    }
 
     if (verdict.decision === 'PENDING') startPolling(entry)
   } catch (err) {
