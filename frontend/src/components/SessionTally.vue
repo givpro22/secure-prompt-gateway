@@ -8,6 +8,7 @@
  */
 import { computed } from 'vue'
 import { STATUS_TERMS } from '../lib/terms'
+import { entryDecision } from '../lib/decision'
 
 const props = defineProps({
   entries: { type: Array, required: true },
@@ -17,28 +18,17 @@ const props = defineProps({
 
 const ORDER = ['ALLOW', 'MASK', 'BLOCK', 'PENDING']
 
-/** 검사 기록의 message.status를 판정 값으로 되돌린다 */
-const FROM_STATUS = { ALLOWED: 'ALLOW', MASKED: 'MASK', BLOCKED: 'BLOCK', PENDING_REVIEW: 'PENDING' }
-
 /*
- * 담당자가 확정했으면 그 결과로 센다. 보낼 때의 판정만 세면 확정이 난 뒤에도 "검토 대기
- * 1"로 남아, 대화에는 "최종 판정 차단"이 떠 있는데 위 숫자는 아직 기다리는 중이라고
- * 말한다.
+ * 턴을 대표하는 판정으로 센다. 보낼 때의 판정만 세면 담당자가 확정한 뒤에도 "검토 대기
+ * 1"로 남고, 답변이 막힌 턴도 "허용"으로 셌다 — 대화에는 차단이라 떠 있는데 위 숫자만
+ * 딴말을 한다. 계산은 lib/decision 하나에 있다.
  */
-function decisionOf(entry) {
-  const settled = entry.inspection
-  if (settled && settled.finalDecision !== 'PENDING') {
-    return FROM_STATUS[settled.status] ?? entry.verdict.decision
-  }
-  return entry.verdict.decision
-}
-
 const counts = computed(() =>
   ORDER.map((decision) => ({
     decision,
     label: STATUS_TERMS[decision].label,
     token: STATUS_TERMS[decision].token,
-    n: props.entries.filter((e) => decisionOf(e) === decision).length,
+    n: props.entries.filter((e) => entryDecision(e) === decision).length,
   })),
 )
 </script>

@@ -7,7 +7,7 @@ import { useSessionStore } from '../stores/session'
 import LlmPicker from './LlmPicker.vue'
 import MaskedText from './MaskedText.vue'
 import StatusBadge from './StatusBadge.vue'
-import { ACTION_TERMS, CATEGORY_TERMS, OBLIGATION_TERMS, term } from '../lib/terms'
+import { ACTION_TERMS, CATEGORY_TERMS, DECIDED_BY_TERMS, OBLIGATION_TERMS, term } from '../lib/terms'
 import { expectField } from '../lib/contract'
 import { shortTitle } from '../lib/text'
 
@@ -278,10 +278,25 @@ async function checkAnswer() {
 }
 
 const answerMatches = computed(() => answerVerdict.value?.ruleResult?.matches ?? [])
+/** 담당자가 답변을 확정했으면 그 결과. 검토 대기로 남아 있으면 null */
+const answerSettled = computed(() => answerVerdict.value?.settled ?? null)
+
+/** 검사 기록의 message.status를 판정 값으로 되돌린다 */
+const FROM_STATUS = { ALLOWED: 'ALLOW', MASKED: 'MASK', BLOCKED: 'BLOCK', PENDING_REVIEW: 'PENDING' }
+
+/*
+ * 화면에 그릴 답변 판정. 확정이 났으면 그 결과다 — 배지는 "검토 대기"인데 아래에는
+ * "차단"이라고 적혀 있으면 어느 쪽이 사실인지 알 수 없다.
+ */
+const answerDecision = computed(() => {
+  const settled = answerSettled.value?.status
+  if (settled) return FROM_STATUS[settled] ?? answerVerdict.value?.decision
+  return answerVerdict.value?.decision
+})
 
 /** 통과한 답변은 접어 둔다. 한 줄이면 충분하고, 내용은 세부사항으로 편다 */
 const showAnswerDetail = ref(false)
-const answerPassed = computed(() => answerVerdict.value?.decision === 'ALLOW')
+const answerPassed = computed(() => answerDecision.value === 'ALLOW')
 
 /*
  * 답변 받기 — 게이트웨이가 모델을 직접 불러 답변을 받고 곧바로 출력 검사에 넘긴다.
@@ -518,16 +533,16 @@ const summary = computed(() => {
     <section
       v-if="answerVerdict"
       class="answer-result"
-      :class="`t-${answerVerdict.decision.toLowerCase()}`"
+      :class="`t-${answerDecision.toLowerCase()}`"
     >
       <header class="answer-head">
-        <StatusBadge :value="answerVerdict.decision" />
+        <StatusBadge :value="answerDecision" />
         <span class="answer-title">답변 재검사 · 규칙 {{ answerMatches.length }}건</span>
       </header>
       <p v-if="approvedText" class="answer-sent">
         모델에 보낸 것: <code>{{ approvedText }}</code>
       </p>
-      <p class="answer-note">{{ ANSWER_TONE[answerVerdict.decision] }}</p>
+      <p class="answer-note">{{ ANSWER_TONE[answerDecision] }}</p>
       <ul v-if="answerMatches.length > 0" class="answer-rules">
         <li v-for="m in answerMatches" :key="`${m.code}:${m.span?.[0]}`">
           <code>{{ m.code }}</code>
@@ -547,6 +562,15 @@ const summary = computed(() => {
         class="answer-body"
       >
         <MaskedText :text="answerVerdict.inspectedText" />
+      </p>
+
+      <!--
+        답변도 검토 대기로 갈 수 있다 (유출 의심, UC-08). 그 확정 결과는 종이 물어 와
+        대화에 적어 두고, 여기서 그린다 — 프롬프트 쪽 "최종 판정"과 같은 자리다.
+      -->
+      <p v-if="answerSettled" class="answer-final caption">
+        보안 담당자가 확정했습니다 · 확정 주체
+        {{ term(DECIDED_BY_TERMS, answerSettled.decidedBy) }}
       </p>
     </section>
 
@@ -1043,6 +1067,14 @@ const summary = computed(() => {
 
 .copy-failed {
   color: var(--amber);
+}
+
+.answer-final {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--gray);
+  font-size: 12px;
 }
 
 .policies {

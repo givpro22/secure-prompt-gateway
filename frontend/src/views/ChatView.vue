@@ -19,7 +19,7 @@ import { shortTitle } from '../lib/text'
 import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 import { notificationFromVerdict, useNotificationStore } from '../stores/notifications'
-import { conversationCache } from '../stores/conversationCache'
+import { conversationCache, sessionDecision } from '../stores/conversationCache'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -181,6 +181,8 @@ async function send() {
     const entry = {
       key: nextKey++,
       verdict,
+      /** 이 발화가 속한 대화. 답변은 비동기로 와서 도착 시점의 활성 세션과 다를 수 있다 */
+      sessionId: thread.activeId,
       // 클라이언트가 들고 있는 입력값. 차단(submittedText=null) 시 버블에 그린다 (D15)
       inputText: text,
       inspection: null,
@@ -230,7 +232,7 @@ async function send() {
         key: `review:${verdict.inspectionId}`,
         kind: 'review',
         inspectionId: verdict.inspectionId,
-        sessionId: thread.activeId,
+        sessionId: entry.sessionId,
         title: shortTitle(text),
       })
     }
@@ -285,6 +287,31 @@ function onAnswered(entry, verdict) {
   entry.answer = verdict
   entry.answerAsked = true
   persist()
+
+  /*
+   * 사이드바 점도 다시 센다. 답변이 검토 대기로 가면 그 대화는 아직 끝나지 않은
+   * 것이므로 지울 수 없어야 한다 — 확정하라고 알림을 받은 사람과 그 대화를 아는
+   * 사람이 어긋나지 않게.
+   */
+  if (entry.sessionId) {
+    thread.settleDecision(entry.sessionId, sessionDecision(entry.sessionId) ?? verdict.decision)
+  }
+
+  /*
+   * 답변도 검토 대기로 간다 — 유출 검사가 의심을 걸면 그렇다 (UC-08). 확정은 담당자가
+   * 하므로 프롬프트 검토와 같은 길로 기다린다. 이걸 걸지 않으면 담당자가 답변을 거절해도
+   * 작성자 화면에는 "보안 담당자 확인이 필요합니다"만 남는다.
+   */
+  if (verdict.decision === 'PENDING' && verdict.inspectionId != null) {
+    notifications.watch(session.currentUserId, {
+      key: `review:${verdict.inspectionId}`,
+      kind: 'review',
+      target: 'answer',
+      inspectionId: verdict.inspectionId,
+      sessionId: entry.sessionId,
+      title: shortTitle(entry.inputText),
+    })
+  }
 }
 
 function applyInspection(entry, inspection) {
