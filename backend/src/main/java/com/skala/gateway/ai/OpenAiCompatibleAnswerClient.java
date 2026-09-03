@@ -111,9 +111,10 @@ public class OpenAiCompatibleAnswerClient implements AnswerClient {
         if (json != null && json.has("error")) {
             JsonNode err = json.path("error");
             String why = err.isObject() ? err.path("message").asText(err.toString()) : err.asText();
-            boolean busy = why.toLowerCase(Locale.ROOT).contains("high demand")
-                    || why.toLowerCase(Locale.ROOT).contains("quota")
-                    || why.toLowerCase(Locale.ROOT).contains("overloaded");
+            // Gemini 무료 등급은 모델별 하루 20회(RPD)가 먼저 닫힌다. 그 오류도 다음 모델로 넘긴다.
+            String w = why.toLowerCase(Locale.ROOT);
+            boolean busy = w.contains("high demand") || w.contains("quota") || w.contains("overloaded")
+                    || w.contains("resource_exhausted") || w.contains("rate limit") || w.contains("exceeded");
             throw new AnswerCallException("제공자 오류: " + why, null, busy);
         }
         if (json == null || json.path("choices").isEmpty()) {
