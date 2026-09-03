@@ -1,5 +1,5 @@
 -- =============================================================================
--- V1__schema.sql — Core Domain 8 테이블
+-- V1__schema.sql — Core Domain 9 테이블
 --
 -- 원본: 기획서 6.2(테이블 상세) / 6.3(관계) / 부록 B(DBML)
 -- Future Domain 4개(attachment, knowledge_source, policy_audit, ai_provider_config)는
@@ -53,15 +53,22 @@ CREATE TABLE policy (
     version    INT          NOT NULL DEFAULT 1,
     is_active  BOOLEAN      NOT NULL DEFAULT true,
     scope      VARCHAR(20)  NOT NULL,
+    valid_from TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    valid_until TIMESTAMPTZ,
+    change_reason VARCHAR(200),
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT uq_policy_code     UNIQUE (code),
     CONSTRAINT chk_policy_category CHECK (category IN ('PII', 'SECRET', 'CONFIDENTIAL')),
-    CONSTRAINT chk_policy_scope    CHECK (scope IN ('GLOBAL', 'DEPT'))
+    CONSTRAINT chk_policy_scope    CHECK (scope IN ('GLOBAL', 'DEPT')),
+    CONSTRAINT chk_policy_validity CHECK (valid_until IS NULL OR valid_until > valid_from)
 );
 
 COMMENT ON TABLE  policy          IS '정책 헤더. 카테고리·버전·활성 여부';
 COMMENT ON COLUMN policy.version  IS '규칙 변경 시 증가. inspection.policy_snapshot이 이 값을 시점 보존';
 COMMENT ON COLUMN policy.scope    IS 'GLOBAL(전사, 매핑 불필요) | DEPT(department_policy 매핑 필요)';
+COMMENT ON COLUMN policy.valid_from IS '이 정책 버전의 적용 시작 시각';
+COMMENT ON COLUMN policy.valid_until IS '이 정책 버전의 적용 종료 시각. NULL이면 종료 미정';
+COMMENT ON COLUMN policy.change_reason IS '정책 버전 변경 사유';
 
 -- -----------------------------------------------------------------------------
 -- 4. policy_rule — 규칙 (기획서 6.2, 7.2)
@@ -104,12 +111,15 @@ CREATE TABLE department_policy (
     dept_id    BIGINT      NOT NULL,
     policy_id  BIGINT      NOT NULL,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at   TIMESTAMPTZ,
     CONSTRAINT pk_department_policy        PRIMARY KEY (dept_id, policy_id),
     CONSTRAINT fk_department_policy_dept   FOREIGN KEY (dept_id)   REFERENCES department (dept_id),
-    CONSTRAINT fk_department_policy_policy FOREIGN KEY (policy_id) REFERENCES policy (policy_id)
+    CONSTRAINT fk_department_policy_policy FOREIGN KEY (policy_id) REFERENCES policy (policy_id),
+    CONSTRAINT chk_department_policy_period CHECK (ended_at IS NULL OR ended_at > applied_at)
 );
 
 COMMENT ON TABLE department_policy IS 'scope=DEPT 정책만 매핑한다. GLOBAL 정책은 매핑 없이 전 부서 적용';
+COMMENT ON COLUMN department_policy.ended_at IS '부서 정책 적용 종료 시각. NULL이면 현재 적용 중';
 
 -- -----------------------------------------------------------------------------
 -- 6. message — 직원이 제출한 프롬프트 (기획서 6.2, 7.5)
@@ -139,16 +149,21 @@ CREATE TABLE inspection (
     inspection_id   BIGSERIAL   PRIMARY KEY,
     message_id      BIGINT      NOT NULL,
     phase           VARCHAR(10) NOT NULL DEFAULT 'INPUT',
+    attempt_no      INT         NOT NULL DEFAULT 1,
     policy_snapshot JSONB       NOT NULL,
     rule_result     JSONB       NOT NULL,
     ai_status       VARCHAR(20) NOT NULL,
     ai_result       JSONB,
+    ai_model_name   VARCHAR(100),
+    ai_model_version VARCHAR(100),
     final_decision  VARCHAR(20),
     decided_by      VARCHAR(10),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at    TIMESTAMPTZ,
+    CONSTRAINT uq_inspection_attempt         UNIQUE (message_id, phase, attempt_no),
     CONSTRAINT fk_inspection_message         FOREIGN KEY (message_id) REFERENCES message (message_id),
     CONSTRAINT chk_inspection_phase          CHECK (phase          IN ('INPUT', 'OUTPUT')),
+    CONSTRAINT chk_inspection_attempt        CHECK (attempt_no > 0),
     CONSTRAINT chk_inspection_ai_status      CHECK (ai_status      IN ('SKIPPED', 'PENDING', 'COMPLETED', 'FAILED')),
     CONSTRAINT chk_inspection_final_decision CHECK (final_decision IN ('ALLOW', 'MASK', 'BLOCK', 'PENDING')),
     CONSTRAINT chk_inspection_decided_by     CHECK (decided_by     IN ('RULE', 'HUMAN'))
@@ -158,6 +173,9 @@ COMMENT ON COLUMN inspection.phase           IS 'INPUT. OUTPUT은 Future(기획�
 COMMENT ON COLUMN inspection.policy_snapshot IS '판정 시점의 정책 id·version·규칙 코드 목록 (7.4-3)';
 COMMENT ON COLUMN inspection.rule_result     IS '규칙 엔진 원본 결과 (9.4 ruleResult)';
 COMMENT ON COLUMN inspection.ai_result       IS 'AI 원본 응답 (9.4 aiAssessment). BLOCK이면 AI 미호출이라 NULL';
+COMMENT ON COLUMN inspection.attempt_no      IS '같은 메시지·단계의 재검사 순서. 최초 검사는 1';
+COMMENT ON COLUMN inspection.ai_model_name   IS 'AI 판정에 사용한 모델명. AI 미호출이면 NULL';
+COMMENT ON COLUMN inspection.ai_model_version IS 'AI 판정 재현을 위한 모델 버전 또는 배포 식별자';
 
 -- -----------------------------------------------------------------------------
 -- 8. inspection_finding — 검사에서 발견된 항목 (기획서 6.2, 4장)
@@ -198,6 +216,31 @@ COMMENT ON COLUMN inspection_finding.review_status IS 'SUGGESTED | ACCEPTED | RE
 COMMENT ON COLUMN inspection_finding.evidence      IS 'AI 후보의 참조 출처 배열 [{source, excerpt}]';
 
 -- -----------------------------------------------------------------------------
+-- 9. inspection_review_history — 관리자 검토 변경 이력
+--    inspection_finding의 review_status는 현재 상태, 이 테이블은 누가 언제 어떤 판단으로
+--    바꿨는지를 누적한다. 감사 화면에서 과거 판단이 덮어써지지 않게 한다.
+-- -----------------------------------------------------------------------------
+CREATE TABLE inspection_review_history (
+    review_id          BIGSERIAL    PRIMARY KEY,
+    finding_id         BIGINT       NOT NULL,
+    reviewer_id        BIGINT       NOT NULL,
+    previous_status    VARCHAR(20)  NOT NULL,
+    decision_status    VARCHAR(20)  NOT NULL,
+    reason             VARCHAR(500),
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT fk_review_history_finding
+        FOREIGN KEY (finding_id) REFERENCES inspection_finding (finding_id),
+    CONSTRAINT fk_review_history_reviewer
+        FOREIGN KEY (reviewer_id) REFERENCES app_user (user_id),
+    CONSTRAINT chk_review_history_previous
+        CHECK (previous_status IN ('SUGGESTED', 'ACCEPTED', 'REJECTED', 'CONFIRMED')),
+    CONSTRAINT chk_review_history_decision
+        CHECK (decision_status IN ('ACCEPTED', 'REJECTED'))
+);
+
+COMMENT ON TABLE inspection_review_history IS 'AI 후보에 대한 관리자 판단 변경 이력. 행을 수정하지 않고 누적한다';
+
+-- -----------------------------------------------------------------------------
 -- 인덱스 (기획서 5.4 감사 콘솔 조회 패턴)
 --   목록은 deptId·status·기간으로 필터하고 created_at 역순 정렬한다.
 --   시드 100건 규모에서는 없어도 되지만 설계 의도를 남긴다.
@@ -206,5 +249,6 @@ CREATE INDEX idx_inspection_created_at ON inspection (created_at DESC);
 CREATE INDEX idx_inspection_message    ON inspection (message_id);
 CREATE INDEX idx_message_user_status   ON message (user_id, status);
 CREATE INDEX idx_finding_inspection    ON inspection_finding (inspection_id);
+CREATE INDEX idx_review_history_finding ON inspection_review_history (finding_id, created_at DESC);
 CREATE INDEX idx_policy_rule_policy    ON policy_rule (policy_id);
 CREATE INDEX idx_app_user_dept         ON app_user (dept_id);

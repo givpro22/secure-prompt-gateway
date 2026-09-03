@@ -70,8 +70,9 @@ UPDATE policy SET owner_dept_id = 4 WHERE code IN ('P-PII', 'P-SEC', 'P-CONF');
 --    REVIEW로 두면 Case B와 같은 202 폴링 흐름이 되어 시연 장면이 겹치기도 한다.
 -- -----------------------------------------------------------------------------
 
-INSERT INTO policy (policy_id, code, name, category, version, is_active, scope, owner_dept_id) VALUES
-    (4, 'P-EMBARGO', '보도자료 엠바고', 'EMBARGO', 1, true, 'DEPT', 5);
+INSERT INTO policy
+    (policy_id, code, name, category, version, is_active, scope, owner_dept_id, change_reason) VALUES
+    (4, 'P-EMBARGO', '보도자료 엠바고', 'EMBARGO', 1, true, 'DEPT', 5, '홍보팀 엠바고 정책 최초 등록');
 
 INSERT INTO policy_rule
     (rule_id, policy_id, code, rule_type, pattern, action, mask_label, severity, obligation,
@@ -80,10 +81,10 @@ INSERT INTO policy_rule
     (9, 4, 'EMB-NOVA-01', 'KEYWORD', '노바,NOVA,SKALA NOVA',
         'BLOCK', NULL, 'HIGH', 'INTERNAL',
         '홍보팀 엠바고 공지 2026-09-01', '신제품 SKALA NOVA 관련 표현. 2026-09-20 해제', DATE '2026-09-20'),
-    -- 해제일이 지났다 → 같은 형태의 규칙인데 걸리지 않는다
+    -- 해제일이 충분히 지났다 → 실행 날짜와 무관하게 같은 형태의 규칙인데 걸리지 않는다
     (10, 4, 'EMB-ATLAS-02', 'KEYWORD', '아틀라스,ATLAS',
         'BLOCK', NULL, 'HIGH', 'INTERNAL',
-        '홍보팀 엠바고 공지 2026-06-10', '제품 SKALA ATLAS 관련 표현. 2026-09-04 해제', DATE '2026-09-04');
+        '홍보팀 엠바고 공지 2026-06-10', '제품 SKALA ATLAS 관련 표현. 2026-08-20 해제', DATE '2026-08-20');
 
 -- 적용 부서. 홍보팀 자신은 매핑하지 않는다 — 발표 주체는 자기 엠바고에 걸리지 않는다.
 INSERT INTO department_policy (dept_id, policy_id) VALUES

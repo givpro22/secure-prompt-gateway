@@ -19,7 +19,7 @@
 --   백슬래시가 그대로 보존된다. E''를 쓰면 \d가 d로 유실된다. 절대 E''를 쓰지 않는다.
 -- =============================================================================
 
-TRUNCATE inspection_finding, inspection, message,
+TRUNCATE inspection_review_history, inspection_finding, inspection, message,
          department_policy, policy_rule, policy, app_user, department
     RESTART IDENTITY CASCADE;
 
@@ -51,10 +51,10 @@ INSERT INTO app_user (user_id, dept_id, name, email, role) VALUES
 --    조립되며, Mock의 결정론적 픽스처가 이 문자열에 걸려 있다. 전부 1로 두면 문서의
 --    모든 예시가 시드와 어긋난다.
 -- -----------------------------------------------------------------------------
-INSERT INTO policy (policy_id, code, name, category, version, is_active, scope) VALUES
-    (1, 'P-PII',  '개인정보 보호',             'PII',          3, true, 'GLOBAL'),
-    (2, 'P-SEC',  '자격증명·인프라 정보 보호', 'SECRET',       7, true, 'GLOBAL'),
-    (3, 'P-CONF', '고객사 프로젝트 정보 통제', 'CONFIDENTIAL', 2, true, 'DEPT');
+INSERT INTO policy (policy_id, code, name, category, version, is_active, scope, change_reason) VALUES
+    (1, 'P-PII',  '개인정보 보호',             'PII',          3, true, 'GLOBAL', '초기 개인정보 규칙 4종 구성'),
+    (2, 'P-SEC',  '자격증명·인프라 정보 보호', 'SECRET',       7, true, 'GLOBAL', '초기 보안정보 규칙 3종 구성'),
+    (3, 'P-CONF', '고객사 프로젝트 정보 통제', 'CONFIDENTIAL', 2, true, 'DEPT',   '초기 고객사 기밀 규칙 구성');
 
 -- -----------------------------------------------------------------------------
 -- 4. 규칙 8종 (기획서 7.2) — pattern은 기획서와 문자 단위로 일치해야 한다
@@ -436,6 +436,16 @@ VALUES
      '[{"source": "고객사 NDA 목록 v3", "excerpt": "A사 — 비밀유지 2027.03까지, 일정·범위 포함"}]'::jsonb,
      'ACCEPTED', 4, now() - interval '20 minutes');
 
+-- 현재 상태(ACCEPTED)뿐 아니라 누가 어떤 근거로 변경했는지 별도 감사 이력으로 남긴다.
+INSERT INTO inspection_review_history
+    (finding_id, reviewer_id, previous_status, decision_status, reason, created_at)
+SELECT finding_id, 4, 'SUGGESTED', 'ACCEPTED',
+       '미공개 고객사 일정이 포함되어 외부 전송을 차단함', reviewed_at
+  FROM inspection_finding
+ WHERE inspection_id = 102
+   AND source = 'AI'
+   AND code = 'CONF-CLIENT-PROJECT';
+
 -- Case C — Case B와 같은 문장인데 개발팀이라 P-CONF가 적용되지 않아 ALLOW.
 -- 부서별 N:M 설계의 증명이므로 policy_snapshot에 P-CONF가 없어야 한다.
 INSERT INTO inspection (inspection_id, message_id, phase, policy_snapshot, rule_result,
@@ -461,3 +471,4 @@ SELECT setval(pg_get_serial_sequence('policy_rule',        'rule_id'),    (SELEC
 SELECT setval(pg_get_serial_sequence('message',            'message_id'), (SELECT max(message_id) FROM message));
 SELECT setval(pg_get_serial_sequence('inspection',         'inspection_id'), (SELECT max(inspection_id) FROM inspection));
 SELECT setval(pg_get_serial_sequence('inspection_finding', 'finding_id'), (SELECT max(finding_id) FROM inspection_finding));
+SELECT setval(pg_get_serial_sequence('inspection_review_history', 'review_id'), (SELECT max(review_id) FROM inspection_review_history));
