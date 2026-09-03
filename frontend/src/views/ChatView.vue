@@ -52,14 +52,14 @@ watch(draft, (text) => {
   writingTimer = setTimeout(() => thread.setWriting(text), 500)
 })
 
-// 사이드바의 "새 대화" — 대화를 비운다. 영속화가 없으므로 화면 상태만 지우면 된다.
+/*
+ * 세션 전환 — 사이드바에서 대화를 누르거나, 새 대화·데모·작성 중을 열거나, 계정을
+ * 바꿀 때 모두 이 하나를 탄다. 화면은 활성 세션의 본문을 캐시에서 꺼내 올릴 뿐이다.
+ */
 watch(
-  () => thread.clearedAt,
+  () => thread.switchAt,
   () => {
-    entries.value = []
-    ownEntries.value = []
-    showingOwn.value = true
-    draft.value = ''
+    entries.value = thread.activeId ? (conversationCache.get(thread.activeId) ?? []) : []
     banner.value = ''
   },
 )
@@ -74,12 +74,7 @@ watch(
 watch(
   () => thread.pendingDraft,
   (picked) => {
-    if (!picked) return
-    entries.value = []
-    ownEntries.value = []
-    showingOwn.value = true
-    banner.value = ''
-    draft.value = picked.text
+    if (picked) draft.value = picked.text
   },
 )
 
@@ -92,45 +87,12 @@ watch(
  */
 const replaying = ref(false)
 
-/*
- * 데모를 여는 동안 치워 두는 내 대화.
- *
- * 예전에는 데모를 누르면 "이번 세션"을 비웠다. 화면에 없는 것을 사이드바가 가리키지
- * 않게 하려던 것인데, 남의 대화를 한 번 들여다봤다고 내가 이번에 한 일이 없어지는
- * 것이 더 이상했다. 지금은 치워 뒀다가 되돌린다 — 데모는 읽고 나오는 자리다.
- */
-const ownEntries = ref([])
-
-
-/*
- * 지금 화면이 내 대화인지. 스토어의 `viewing`을 보지 않는 이유가 있다 — 스토어는
- * 사이드바 강조를 위해 값을 먼저 바꿔 두므로, 그것으로 판단하면 되돌리는 쪽이
- * 항상 "이미 내 대화"라고 착각하고 빠져나간다.
- */
-const showingOwn = ref(true)
-
-/** 치워 둔 내 대화를 되돌린다. 입력하거나 "이번 세션"을 누를 때 탄다 */
-function restoreOwn() {
-  thread.setViewing('own')
-  if (showingOwn.value) return
-  entries.value = ownEntries.value
-  ownEntries.value = []
-  showingOwn.value = true
-}
-
-watch(() => thread.resumeAt, restoreOwn)
-
 watch(
   () => thread.pendingDemo,
   async (demo) => {
     if (!demo || replaying.value) return
     replaying.value = true
-    // 내 대화는 지우지 않고 옆에 둔다. 데모에서 데모로 옮길 때 앞 데모를 내 것으로
-    // 착각하지 않도록, 치우는 것은 내 대화를 보고 있을 때뿐이다.
-    if (showingOwn.value) {
-      ownEntries.value = entries.value
-      showingOwn.value = false
-    }
+    // 세션은 스토어가 이미 만들어 활성으로 두었다. 여기서는 그 세션을 채우기만 한다.
     entries.value = []
     banner.value = ''
     try {
@@ -151,6 +113,7 @@ watch(
       draft.value = ''
       thread.setWriting(null)
       replaying.value = false
+      persist()
     }
   },
 )
@@ -169,44 +132,24 @@ const {
 let nextKey = 1
 
 /*
- * 계정별 대화. 로그인이 없어 계정을 갈아 끼우며 시연하는데(0.3), 한 벌만 두면
- * 영업팀으로 바꾼 순간 개발팀이 하던 말이 화면에 그대로 남는다. 부서에 따라 판정이
- * 갈리는 것을 보여주는 자리라 특히 섞이면 안 된다.
- *
- * 스토어가 아니라 여기 두는 이유는 entries가 판정 응답 덩어리이기 때문이다. 사이드바가
- * 읽어야 하는 요약(제목·턴 수·작성 중)만 스토어에 있고, 본문은 화면이 들고 있는다.
+ * 계정 전환. 세션 목록도 캐시도 계정·세션 단위로 갈라져 있어, 스토어에 계정만
+ * 알려주면 나머지는 세션 전환 워처가 한다.
  */
-const convByUser = conversationCache
-
-function snapshotConversation() {
-  return {
-    entries: entries.value,
-    ownEntries: ownEntries.value,
-    showingOwn: showingOwn.value,
-    draft: draft.value,
-  }
-}
-
 watch(
   () => session.currentUserId,
-  (next, prev) => {
-    if (prev != null) convByUser.set(prev, snapshotConversation())
-    const saved = convByUser.get(next)
-    entries.value = saved?.entries ?? []
-    ownEntries.value = saved?.ownEntries ?? []
-    showingOwn.value = saved?.showingOwn ?? true
-    draft.value = saved?.draft ?? ''
-    banner.value = ''
+  (next) => {
+    draft.value = ''
     thread.useAccount(next)
     notifications.useAccount(next)
   },
   { immediate: true },
 )
 
-// 화면을 떠날 때(콘솔로 이동 등) 지금 대화를 저장한다. 안 그러면 돌아왔을 때 빈 화면이다.
-onBeforeUnmount(() => {
-  convByUser.set(session.currentUserId, snapshotConversation())
-})
+/** 지금 대화를 캐시에 남긴다. 화면을 떠나도(콘솔 이동) 돌아오면 그대로다 */
+function persist() {
+  if (thread.activeId) conversationCache.set(thread.activeId, entries.value)
+}
+onBeforeUnmount(persist)
 
 /** 상태 코드와 decision이 계약(§1-4)대로 대응하는지 확인한다. */
 function checkDecision(status, verdict) {
@@ -223,9 +166,9 @@ async function send() {
   const text = draft.value.trim()
   if (text.length === 0 || sending.value) return
 
-  // 데모를 보다가 입력하면 내 대화로 돌아온 뒤 이어 붙인다. 데모는 읽기만 하는 자리라
-  // 남의 세션에 내 발화를 얹지 않는다.
-  if (!replaying.value) restoreOwn()
+  // 데모를 보다가 입력하면 새 대화로 시작한다. 데모는 읽고 나오는 자리라 남의 세션에
+  // 내 발화를 얹지 않는다.
+  if (!replaying.value && (!thread.activeId || thread.active?.kind === 'demo')) thread.open()
 
   sending.value = true
   banner.value = ''
@@ -246,6 +189,7 @@ async function send() {
       live: !replaying.value,
     }
     entries.value.push(entry)
+    persist()
 
     /*
      * 차단은 수정 후 재전송을 유도하는 것이 목적이므로 입력을 날리지 않는다.
@@ -350,7 +294,7 @@ function isHumanDecided(entry) {
   <div class="chat" :class="{ started }">
     <p v-if="banner" class="banner">{{ banner }}</p>
 
-    <SessionTally :entries="entries" :own="thread.viewing === 'own'" />
+    <SessionTally :entries="entries" :own="thread.active?.kind !== 'demo'" />
 
     <section class="thread">
       <!-- S1 초기 — 인사말만. 입력창이 가운데 있다가 대화가 시작되면 내려간다 -->
