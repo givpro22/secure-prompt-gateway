@@ -362,7 +362,10 @@ function evaluate(text, deptId) {
 
 const STATUS_OF = { ALLOW: 'ALLOWED', MASK: 'MASKED', BLOCK: 'BLOCKED', PENDING: 'PENDING_REVIEW' }
 
-/** Case B 픽스처 (`mock/ai/case-b-client-project.json` 상당) */
+/**
+ * 백엔드 `mock/ai/*.json`과 같은 응답을 낸다. 여기가 어긋나면 픽스처 모드와 실서버가
+ * 다른 판정을 보여준다 (CLAUDE.md).
+ */
 function assessmentFor(text) {
   if (text.includes('A사')) {
     return {
@@ -375,6 +378,26 @@ function assessmentFor(text) {
         },
       ],
       missingContext: ['해당 일정이 대외 공개된 정보인지 확인 필요'],
+      reviewRequired: true,
+    }
+  }
+  // `mock/ai/case-client-generic.json` 상당. 손으로 쓴 것이 아니라 qwen2.5:7b-instruct가
+  // 실제로 낸 응답을 받아 적은 것이다 (backend/src/main/resources/mock/ai/README.md).
+  if (text.includes('B사')) {
+    return {
+      riskCandidates: [
+        {
+          code: 'AI-CONTEXT',
+          category: 'CONFIDENTIAL',
+          rationale:
+            '규칙에 걸리지 않았으나 미공개 사내 정보로 읽히는 서술입니다. 해당 문장: 그 거래처 여신 한도는 이미 초과 상태입니다.',
+          evidence: [
+            { source: '입력 문장', excerpt: '그 거래처 여신 한도는 이미 초과 상태입니다.' },
+            { source: '고객사 NDA 목록 v3', excerpt: 'B사' },
+          ],
+        },
+      ],
+      missingContext: [],
       reviewRequired: true,
     }
   }

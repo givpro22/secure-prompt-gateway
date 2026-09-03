@@ -57,6 +57,15 @@ function pick(item) {
   panel.value = item.id
 }
 
+/*
+ * 검사 엔진을 바꾼다. @Profile은 기동 시 고정이라 프로파일이 다른 백엔드를 두 개
+ * 띄워 두고 프론트가 보는 주소를 바꾼다. 화면·요청·응답이 전부 같아서 주소만 바꿔도
+ * 성립한다는 것이 AiInspector가 유일한 교체 지점이라는 증거다 (기획서 9.6).
+ */
+function onEngine(event) {
+  session.setEngine(event.target.value)
+}
+
 function switchTo(userId) {
   session.setCurrentUser(userId)
   accountOpen.value = false
@@ -157,6 +166,19 @@ const PANEL_TITLE = {
           <div><dt>적용 정책</dt><dd>{{ session.policies.length }}건 · 규칙 {{ ruleCount }}종</dd></div>
           <div><dt>정책 기준일</dt><dd>{{ baseDate }}</dd></div>
           <div><dt>전송 대상 모델</dt><dd>Llama-3.1-70B · 사내 GPU</dd></div>
+          <!--
+            검사 엔진 전환 (시연 전용). 위의 '전송 대상 모델'과 다른 축이다 —
+            그쪽은 승인된 본문을 어디로 보낼지이고, 이쪽은 무엇이 그 본문을 검사하는지다.
+            VITE_API_BASE_LLM이 있을 때만 뜬다. 배포본에는 없다.
+          -->
+          <div v-if="session.engineSwitchable">
+            <dt>검사 엔진</dt>
+            <dd>
+              <select class="engine" :value="session.engineId" @change="onEngine">
+                <option v-for="e in session.engines" :key="e.id" :value="e.id">{{ e.label }}</option>
+              </select>
+            </dd>
+          </div>
           <div><dt>원문 보관</dt><dd>감사 목적으로 저장하되 화면에는 표시하지 않습니다</dd></div>
           <div><dt>로그인</dt><dd>구현하지 않았습니다. 계정 전환으로 부서를 바꿉니다</dd></div>
         </dl>
@@ -449,4 +471,14 @@ dd {
   font-weight: 600;
 }
 
+
+.rows dd select.engine {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
 </style>
