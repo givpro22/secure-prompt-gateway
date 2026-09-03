@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,7 +27,8 @@ import org.springframework.web.client.RestClientResponseException;
  * 된다. Claude만 공식 SDK를 쓰는 이유는 응답 구조(거절 사유 등)가 달라서다.
  */
 @Component
-@ConditionalOnProperty(name = "answer.provider", havingValue = "openai")
+/* provider=openai, 또는 provider가 비어 있는데 endpoint가 있으면 (ollama는 명시해야 한다) */
+@ConditionalOnExpression("'${answer.provider:}' == 'openai' or ('${answer.provider:}' == '' and '${answer.endpoint:}' != '')")
 public class OpenAiCompatibleAnswerClient implements AnswerClient {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleAnswerClient.class);

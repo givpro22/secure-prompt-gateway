@@ -12,7 +12,7 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,7 +31,12 @@ import org.springframework.stereotype.Component;
  * 않았다 — 거절이면 그대로 거절로 돌려주고 사람이 본다.
  */
 @Component
-@ConditionalOnProperty(name = "answer.provider", havingValue = "claude", matchIfMissing = true)
+/*
+ * provider가 비어 있어도 endpoint가 있으면 Claude가 아니다 — SDK는 endpoint를 쓰지 않는다.
+ * 배포에서 ANSWER_PROVIDER 하나가 빠졌는데 Gemini 키를 이 클라이언트가 물고 뜬 적이 있다.
+ * 설정 하나의 유무로 조용히 잘못 켜지는 것을 막는다.
+ */
+@ConditionalOnExpression("'${answer.provider:}' == 'claude' or ('${answer.provider:}' == '' and '${answer.endpoint:}' == '')")
 public class ClaudeAnswerClient implements AnswerClient {
 
     private static final Logger log = LoggerFactory.getLogger(ClaudeAnswerClient.class);
