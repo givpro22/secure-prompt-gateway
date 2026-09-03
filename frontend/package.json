@@ -8,6 +8,7 @@
     "dev:fixtures": "vite --mode fixtures",
     "build": "vite build",
     "preview": "vite preview",
+    "capture:figma": "node dev/capture-figma-assets.mjs",
     "dev:llm": "vite --mode llm"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
+    "playwright-core": "^1.62.1",
     "vite": "^8.2.2"
   }
 }
