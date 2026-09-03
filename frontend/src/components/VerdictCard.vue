@@ -36,7 +36,19 @@ const props = defineProps({
    * 사실도 확정 결과도 대화 쪽에 있어야 남는다.
    */
   unmask: { type: Object, default: null },
+  /**
+   * 이미 받아서 검사한 답변. 대화 쪽에 적어 둔 것을 그대로 받는다.
+   *
+   * 카드 안에만 두었더니 세션을 옮겼다 돌아오는 순간 사라졌다. 그리고 빈 상태로 다시
+   * 만들어진 카드가 답을 또 요청해서, 서버가 409(이미 검사함)로 막고 화면에는 오류가
+   * 떴다 — 답변이 있던 자리에 붙여넣기 입력창이 대신 나왔다.
+   */
+  answer: { type: Object, default: null },
+  /** 답을 이미 요청했는지. 요청 도중에 세션을 옮겨 응답을 놓쳐도 다시 부르지 않는다 */
+  answerAsked: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(['answered', 'asking'])
 
 const matches = computed(() => {
   const value = props.verdict.ruleResult?.matches
@@ -225,7 +237,9 @@ const isMask = computed(() => props.verdict.decision === 'MASK')
 const checking = ref(false)
 const answer = ref('')
 const answerBusy = ref(false)
-const answerVerdict = ref(null)
+const localAnswer = ref(null)
+/** 방금 받은 것(로컬)이거나 대화에 적혀 있던 것 */
+const answerVerdict = computed(() => props.answer ?? localAnswer.value)
 const answerError = ref('')
 
 const canCheckAnswer = computed(
@@ -246,7 +260,8 @@ async function checkAnswer() {
   answerError.value = ''
   try {
     const res = await submitResponse(props.verdict.messageId, text)
-    answerVerdict.value = res.data
+    localAnswer.value = res.data
+    emit('answered', res.data)
     checking.value = false
     notifications.push(session.currentUserId, {
       tone: res.data.decision === 'ALLOW' ? 'allow' : res.data.decision.toLowerCase(),
@@ -283,7 +298,7 @@ onMounted(async () => {
     autoAnswer.value = { available: false, provider: '' }
   }
   // 나간 것(ALLOW·MASK)에만, 제공자가 켜져 있을 때만 이어서 답을 받는다.
-  if (props.autoAnswer && autoAnswer.value.available && canCheckAnswer.value) {
+  if (props.autoAnswer && !props.answerAsked && autoAnswer.value.available && canCheckAnswer.value) {
     await getAnswer()
   }
 })
@@ -292,9 +307,13 @@ async function getAnswer() {
   if (fetching.value) return
   fetching.value = true
   answerError.value = ''
+  // 요청했다는 사실을 먼저 대화에 남긴다. 응답을 기다리는 사이에 세션을 옮기면 이
+  // 카드는 사라지고, 남은 표시가 없으면 돌아왔을 때 같은 답을 또 부른다.
+  emit('asking')
   try {
     const res = await requestAnswer(props.verdict.messageId)
-    answerVerdict.value = res.data
+    localAnswer.value = res.data
+    emit('answered', res.data)
     checking.value = false
     notifications.push(session.currentUserId, {
       tone: res.data.decision === 'ALLOW' ? 'allow' : res.data.decision.toLowerCase(),
@@ -304,6 +323,15 @@ async function getAnswer() {
     })
   } catch (err) {
     const code = err?.response?.data?.code
+    /*
+     * 이미 검사한 답변은 오류가 아니다. 요청 도중에 화면을 떠나 응답을 놓친 경우인데,
+     * 붙여넣기 입력창을 띄우면 같은 답을 두 번 검사하게 된다.
+     */
+    if (code === 'RESPONSE_ALREADY_INSPECTED') {
+      answerError.value = '이 답변은 이미 검사했습니다. 결과는 감사 기록에 남아 있습니다.'
+      checking.value = false
+      return
+    }
     answerError.value =
       code === 'ANSWER_UNAVAILABLE'
         ? '답변 받기가 꺼져 있습니다. 받은 답변을 붙여넣어 검사하세요.'

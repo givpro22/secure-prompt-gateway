@@ -186,6 +186,12 @@ async function send() {
       inspection: null,
       aiStatus: verdict.aiStatus,
       note: '',
+      /** 게이트웨이가 받아 검사한 답변. 카드가 아니라 여기 남아야 세션을 오가도 산다 */
+      answer: null,
+      /** 답을 이미 요청했는지. 응답을 놓쳐도 같은 답을 두 번 부르지 않는다 */
+      answerAsked: false,
+      /** 마스킹 해제 검토의 확정 결과 */
+      unmask: null,
       // 실제로 보낸 것인지. 데모 재생은 답을 미리 갖고 있어 자동 답변을 켜지 않는다.
       live: !replaying.value,
     }
@@ -274,6 +280,13 @@ function startPolling(entry) {
   })
 }
 
+/** 받은 답변을 대화에 남긴다. 세션을 옮겼다 와도 그대로 있어야 한다 */
+function onAnswered(entry, verdict) {
+  entry.answer = verdict
+  entry.answerAsked = true
+  persist()
+}
+
 function applyInspection(entry, inspection) {
   // 담당자가 확정하면 대화 전체의 대표 판정도 따라 올라간다.
   if (inspection?.status) thread.raiseDecision(inspection.status)
@@ -339,11 +352,19 @@ function isHumanDecided(entry) {
         -->
         <MessageBubble :text="entry.inputText" :blocked="entry.verdict.decision === 'BLOCK'" />
 
+        <!--
+          답변과 해제 확정 결과는 대화가 들고 있는다. 카드는 세션을 옮길 때마다 다시
+          만들어져 자기 상태를 기억하지 못한다.
+        -->
         <VerdictCard
           :verdict="entry.verdict"
           :original-text="entry.inputText"
           :auto-answer="entry.live"
           :unmask="entry.unmask"
+          :answer="entry.answer"
+          :answer-asked="entry.answerAsked"
+          @asking="entry.answerAsked = true"
+          @answered="onAnswered(entry, $event)"
         />
 
         <!-- 데모 대화의 답변. 미리 적어 둔 문장이며 모델을 부른 결과가 아니다 (0.3) -->
