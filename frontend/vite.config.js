@@ -14,7 +14,24 @@ import { fixtureServer } from './dev/fixture-server.js'
  *
  * git이 없는 환경(배포 이미지 등)에서는 빈 값이 되고 화면은 그 줄을 숨긴다.
  */
+/*
+ * 화면 우하단의 정책 버전. 저장소 커밋 수와 짧은 SHA다.
+ *
+ * 컨테이너 빌드에는 `.git`이 없다. 그래서 CI가 `GIT_COMMIT_COUNT`·`GIT_SHA`를
+ * build-arg로 넘기고, 여기서는 그 값을 먼저 본다. 로컬 개발에서는 환경변수가 없으니
+ * git을 직접 부른다 — 두 경로가 같은 값을 만든다.
+ *
+ * 전에는 git만 불렀다. 로컬에서는 잘 나오고 배포하면 조용히 0이 되어 버전 줄이
+ * 통째로 사라졌다. 빌드 환경이 개발 환경과 다르다는 것을 값이 아니라 예외로만
+ * 처리한 탓이다.
+ */
 function gitVersion() {
+  const fromEnv = {
+    count: Number(process.env.GIT_COMMIT_COUNT ?? 0),
+    sha: process.env.GIT_SHA ?? '',
+  }
+  if (fromEnv.count > 0 && fromEnv.sha) return fromEnv
+
   const run = (args) => execFileSync('git', args, { cwd: __dirname, encoding: 'utf8' }).trim()
   try {
     return { count: Number(run(['rev-list', '--count', 'HEAD'])), sha: run(['rev-parse', '--short', 'HEAD']) }
