@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import StatusBadge from './StatusBadge.vue'
 import { ACTION_TERMS, CATEGORY_TERMS, OBLIGATION_TERMS, term } from '../lib/terms'
 import { expectField } from '../lib/contract'
@@ -42,6 +42,47 @@ const embargoUntil = computed(() => {
   const dates = matches.value.map((m) => m.embargoUntil).filter(Boolean)
   return dates.length === 0 ? null : dates.slice().sort().at(-1)
 })
+
+/*
+ * 전송이 승인된 본문. ALLOW면 원문 그대로, MASK면 라벨로 치환된 본문이다.
+ * BLOCK은 null이고 PENDING은 아직 확정 전이라 내보낼 수 없다.
+ */
+const approvedText = computed(() => {
+  const d = props.verdict.decision
+  if (d !== 'ALLOW' && d !== 'MASK') return null
+  return props.verdict.submittedText ?? null
+})
+
+/*
+ * 상용 LLM은 게이트웨이가 대신 호출하지 않는다 (기획서 0.3 — 실제 LLM 호출은 범위 밖).
+ * 승인된 본문을 클립보드에 넣고 해당 서비스를 열어 사람이 붙여넣는다.
+ *
+ * 본문을 URL 쿼리에 실어 보내지 않는 것은 의도다. 게이트웨이가 승인한 본문이라도
+ * 주소창·브라우저 기록·리퍼러에 남기면 통제한 경로 밖으로 한 번 더 새는 셈이다.
+ */
+const EXTERNAL_LLMS = [
+  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/' },
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new' },
+  { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app' },
+]
+
+const copied = ref(false)
+const targetId = ref(EXTERNAL_LLMS[0].id)
+
+async function sendToSelected() {
+  const text = approvedText.value
+  const target = EXTERNAL_LLMS.find((l) => l.id === targetId.value)
+  if (!text || !target) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 2400)
+  } catch {
+    // 클립보드가 막힌 환경(비 HTTPS 등)에서도 창은 열어준다. 사용자가 직접 복사한다.
+    copied.value = false
+  }
+  window.open(target.url, '_blank', 'noopener,noreferrer')
+}
 
 const isAllow = computed(() => props.verdict.decision === 'ALLOW')
 const isBlock = computed(() => props.verdict.decision === 'BLOCK')
@@ -101,6 +142,23 @@ const summary = computed(() => {
     <p v-if="isMask" class="hint">
       탐지된 개인정보를 라벨로 치환한 본문만 전송되었습니다. 위 발화에 표시된 노란 라벨이 치환 구간입니다.
     </p>
+
+    <!--
+      승인된 본문만 밖으로 나갈 수 있다. 차단·검토 대기에는 이 줄이 뜨지 않는다.
+    -->
+    <div v-if="approvedText" class="egress">
+      <span class="egress-label">
+        이 본문은 전송이 승인되었습니다{{ isMask ? ' (마스킹 적용본)' : '' }}.
+      </span>
+      <span class="egress-actions">
+        <label class="sr-only" :for="`llm-${verdict.inspectionId}`">전송할 서비스</label>
+        <select :id="`llm-${verdict.inspectionId}`" v-model="targetId" class="egress-select">
+          <option v-for="llm in EXTERNAL_LLMS" :key="llm.id" :value="llm.id">{{ llm.name }}</option>
+        </select>
+        <button type="button" class="egress-btn" @click="sendToSelected">프롬프트 입력</button>
+      </span>
+      <span v-if="copied" class="copied" role="status">승인 본문을 복사했습니다</span>
+    </div>
 
     <footer v-if="policies.length > 0" class="policies caption">
       적용 정책
@@ -231,6 +289,71 @@ const summary = computed(() => {
   margin: 10px 0 0;
   font-size: var(--font-caption);
   color: var(--navy);
+}
+
+.egress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: var(--font-caption);
+}
+
+.egress-label {
+  color: var(--navy);
+}
+
+.egress-actions {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.egress-select {
+  border: 0;
+  border-right: 1px solid var(--border);
+  padding: 4px 8px 4px 11px;
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.egress-select:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.egress-btn {
+  padding: 4px 12px;
+  border: 0;
+  background: var(--navy);
+  color: #fff;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.egress-btn:hover {
+  background: var(--blue);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.copied {
+  color: var(--green);
 }
 
 .policies {

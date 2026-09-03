@@ -39,6 +39,16 @@ const draft = ref('')
  */
 const started = computed(() => entries.value.length > 0)
 
+/*
+ * 전송하지 않은 입력은 사이드바 "작성 중"으로 넘어간다. 타이핑마다 스토어를 때리지
+ * 않도록 잠깐 멈췄을 때만 반영한다.
+ */
+let writingTimer = null
+watch(draft, (text) => {
+  clearTimeout(writingTimer)
+  writingTimer = setTimeout(() => thread.setWriting(text), 500)
+})
+
 // 사이드바의 "새 대화" — 대화를 비운다. 영속화가 없으므로 화면 상태만 지우면 된다.
 watch(
   () => thread.clearedAt,
@@ -49,16 +59,42 @@ watch(
   },
 )
 
-// 사이드바의 (demo) 이력. 완료된 대화는 그대로 태워서 답변까지 보이게 하고,
-// 작성 중 항목은 입력창만 복원한다.
+// 작성 중 항목 — 입력창만 복원한다.
 watch(
   () => thread.pendingDraft,
-  async (picked) => {
-    if (!picked) return
-    draft.value = picked.text
-    if (!picked.send) return
-    await nextTick()
-    if (!sending.value) send()
+  (picked) => {
+    if (picked) draft.value = picked.text
+  },
+)
+
+/*
+ * 데모 대화 열기. **지금 대화를 갈아끼운다** — 이어붙이면 서로 다른 세션의 판정이
+ * 한 흐름처럼 보이고 누를수록 쌓이기만 한다.
+ *
+ * 판정 객체를 심지 않고 문장을 차례로 태운다. 앞 턴이 끝나야 다음 턴을 보내므로
+ * 순서가 화면에 그대로 남는다 — 차단당하고 고쳐서 다시 보내는 흐름이 그 순서다.
+ */
+const replaying = ref(false)
+
+watch(
+  () => thread.pendingDemo,
+  async (demo) => {
+    if (!demo || replaying.value) return
+    replaying.value = true
+    entries.value = []
+    thread.items = []
+    banner.value = ''
+    try {
+      for (const prompt of demo.prompts) {
+        draft.value = prompt
+        await nextTick()
+        await send()
+      }
+    } finally {
+      draft.value = ''
+      thread.setWriting(null)
+      replaying.value = false
+    }
   },
 )
 const sending = ref(false)
@@ -115,6 +151,8 @@ async function send() {
      */
     draft.value = verdict.decision === 'BLOCK' ? text : ''
 
+    // 보냈으니 더 이상 작성 중이 아니다.
+    thread.setWriting(null)
     thread.push({
       key: entry.key,
       text: text.length > 26 ? `${text.slice(0, 26)}…` : text,
@@ -314,7 +352,8 @@ function isHumanDecided(entry) {
 .layout {
   display: flex;
   align-items: stretch;
-  min-height: calc(100vh - var(--header-h));
+  height: 100%;
+  min-height: 0;
 }
 
 .chat {
@@ -323,9 +362,12 @@ function isHumanDecided(entry) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
   max-width: 880px;
   margin: 0 auto;
-  padding: 20px 16px 24px;
+  padding: 20px 16px 20px;
+  height: 100%;
+  min-height: 0;
 }
 
 .thread {
@@ -334,8 +376,16 @@ function isHumanDecided(entry) {
   position: relative;
 }
 
+/* 대화가 쌓이면 스레드만 스크롤한다. 입력창과 캡션은 항상 보인다 */
 .chat.started .thread {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.composer {
+  flex: none;
 }
 
 .empty {
