@@ -296,10 +296,44 @@ function token(decision) {
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <span class="mark" aria-hidden="true">SP</span>
+      <!--
+        육각형 세 조각. 로고를 32px로 줄이면 가운데 자물쇠가 뭉개지므로 형태와 색만
+        남겼다. 왼쪽 위 남색에서 오른쪽 초록으로 도는 순서는 로고와 같다.
+      -->
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="30" height="30">
+          <defs>
+            <linearGradient id="prism-mark" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#2f5f9e" />
+              <stop offset="45%" stop-color="#2a9fd6" />
+              <stop offset="100%" stop-color="#2fc47f" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M16 2.6 28 9.5v13.8L16 30.2 4 23.3V9.5Z"
+            fill="none"
+            stroke="url(#prism-mark)"
+            stroke-width="2.6"
+            stroke-linejoin="round"
+          />
+          <!--
+            자물쇠는 밝은 색으로 둔다. 로고의 남색 자물쇠를 그대로 쓰면 남색 사이드바에
+            묻혀 안 보인다. 고리는 선, 몸통은 면 — 30px에서 형태가 안 무너진다.
+          -->
+          <path
+            d="M13.4 15.6v-1.9a2.6 2.6 0 0 1 5.2 0v1.9"
+            fill="none"
+            stroke="var(--nav-fg)"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          />
+          <rect x="12" y="15.4" width="8" height="6.4" rx="1.3" fill="var(--nav-fg)" />
+          <rect x="15.35" y="17.6" width="1.3" height="2.4" rx="0.65" fill="var(--nav-bg)" />
+        </svg>
+      </span>
       <span class="name">
-        <strong>Secure Prompt</strong>
-        <em>Gateway</em>
+        <strong>PRISM</strong>
+        <em>사내 AI 게이트웨이</em>
       </span>
     </div>
 
@@ -430,16 +464,13 @@ function token(decision) {
   padding: 2px 4px;
 }
 
+/* 글자 마크였을 때 필요하던 배경·서체를 뺀다. 이제 도형 자체가 마크다 */
 .mark {
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  background: var(--nav-bg-active);
-  color: var(--nav-fg);
-  font-size: 13px;
-  font-weight: 700;
+  flex: none;
 }
 
 .name {
@@ -448,8 +479,10 @@ function token(decision) {
   line-height: 1.25;
 }
 
+/* 다섯 글자짜리 이름이라 자간을 조금 벌린다. 로고와 같은 인상을 준다 */
 .name strong {
-  font-size: 15.5px;
+  font-size: 16px;
+  letter-spacing: 0.06em;
 }
 
 .name em {
