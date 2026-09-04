@@ -8,7 +8,7 @@
  */
 import { computed } from 'vue'
 import { STATUS_TERMS } from '../lib/terms'
-import { entryDecision } from '../lib/decision'
+import { entryVerdicts } from '../lib/decision'
 
 const props = defineProps({
   entries: { type: Array, required: true },
@@ -23,14 +23,20 @@ const ORDER = ['ALLOW', 'MASK', 'BLOCK', 'PENDING']
  * 1"로 남고, 답변이 막힌 턴도 "허용"으로 셌다 — 대화에는 차단이라 떠 있는데 위 숫자만
  * 딴말을 한다. 계산은 lib/decision 하나에 있다.
  */
-const counts = computed(() =>
-  ORDER.map((decision) => ({
+/*
+ * 검사 단위로 센다. 한 발화에 검사가 둘일 수 있어서(보낸 것·받은 것) 턴당 하나만 세면
+ * 둘 중 심한 것만 남고 나머지가 숫자에서 사라진다 — 마스킹해서 보냈는데 답변이 검토로
+ * 가면 화면에는 "규칙 3건 마스킹"이 떠 있는데 집계는 "마스킹 0"이 된다.
+ */
+const counts = computed(() => {
+  const all = props.entries.flatMap((e) => entryVerdicts(e))
+  return ORDER.map((decision) => ({
     decision,
     label: STATUS_TERMS[decision].label,
     token: STATUS_TERMS[decision].token,
-    n: props.entries.filter((e) => entryDecision(e) === decision).length,
-  })),
-)
+    n: all.filter((d) => d === decision).length,
+  }))
+})
 </script>
 
 <template>

@@ -42,9 +42,28 @@ function answerDecision(entry) {
   return settled ? (FROM_STATUS[settled] ?? a.decision) : a.decision
 }
 
-/** 이 턴을 대표하는 판정 */
+/** 이 턴을 대표하는 판정. 사이드바 점과 삭제 가능 여부가 쓴다 */
 export function entryDecision(entry) {
   return worse(promptDecision(entry), answerDecision(entry))
+}
+
+/**
+ * 이 턴에서 일어난 **검사들**의 판정. 하나이거나 둘이다.
+ *
+ * 한 발화에 검사가 둘일 수 있다 — 보낸 프롬프트(phase=INPUT)와 받은 답변(phase=OUTPUT).
+ * 집계를 턴당 하나로 세면 둘 중 심한 것만 남아 나머지가 사라진다. 마스킹해서 보냈는데
+ * 답변이 검토로 갔으면 "마스킹 0 · 검토 대기 1"이 되어, 방금 화면에서 본 마스킹 3건이
+ * 숫자에서 없어진다.
+ *
+ * 검사 하나가 한 번씩 세어진다. 합이 턴 수보다 클 수 있고, 그것이 사실이다.
+ */
+export function entryVerdicts(entry) {
+  const out = []
+  const prompt = promptDecision(entry)
+  if (prompt) out.push(prompt)
+  const answer = answerDecision(entry)
+  if (answer) out.push(answer)
+  return out
 }
 
 /*
