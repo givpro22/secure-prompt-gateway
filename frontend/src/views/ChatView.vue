@@ -20,6 +20,7 @@ import { useSessionStore } from '../stores/session'
 import { useThreadStore } from '../stores/thread'
 import { notificationFromVerdict, useNotificationStore } from '../stores/notifications'
 import { conversationCache, sessionDecision } from '../stores/conversationCache'
+import { turnStatus } from '../lib/decision'
 
 /*
  * SCR-01 직원 AI 챗 — 상태 5종 (기획서 5.3).
@@ -350,6 +351,12 @@ function onAnswered(entry, verdict) {
   }
 }
 
+/** 해제 요청을 올린 사실을 대화에 남긴다. 확정이 나면 종이 같은 자리를 덮어쓴다 */
+function onUnmaskRequested(entry, row) {
+  entry.unmask = row
+  persist()
+}
+
 function applyInspection(entry, inspection) {
   // 담당자가 확정하면 대화 전체의 대표 판정도 따라 올라간다.
   if (inspection?.status) thread.raiseDecision(inspection.status)
@@ -428,6 +435,7 @@ function isHumanDecided(entry) {
           :answer-asked="entry.answerAsked"
           @asking="entry.answerAsked = true"
           @answered="onAnswered(entry, $event)"
+          @unmask-requested="onUnmaskRequested(entry, $event)"
         />
 
         <!-- 데모 대화의 답변. 미리 적어 둔 문장이며 모델을 부른 결과가 아니다 (0.3) -->
@@ -498,6 +506,19 @@ function isHumanDecided(entry) {
             <span class="caption">담당자 확정 결과는 이 버튼으로 반영됩니다.</span>
           </div>
         </template>
+
+        <!--
+          이 발화가 지금 어떤 상태인가, 한 줄로.
+
+          카드에는 프롬프트 판정·답변 판정·해제 요청이 따로 떠 있어서 여러 개가 겹치면
+          무엇을 기다리는 중인지 읽는 데 시간이 걸린다. 고르는 순서는 lib/decision에 있다 —
+          아직 사람이 정하지 않은 것이 가장 먼저다.
+        -->
+        <p v-if="turnStatus(entry)" class="turn-status" :class="`t-${turnStatus(entry).tone}`">
+          <span class="ts-dot" aria-hidden="true" />
+          <span class="ts-label">현재 상태 · {{ turnStatus(entry).label }}</span>
+          <span class="ts-detail">{{ turnStatus(entry).detail }}</span>
+        </p>
       </article>
     </section>
 
@@ -717,6 +738,66 @@ function isHumanDecided(entry) {
   align-items: center;
   gap: 8px;
   margin: 10px 2px 0;
+}
+
+/* 턴의 마지막 줄. 판정색 네 가지를 그대로 쓴다 */
+.turn-status {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 12px 2px 0;
+  padding: 9px 12px;
+  border-left: 3px solid var(--gray);
+  border-radius: 0 6px 6px 0;
+  background: var(--card);
+  font-size: 13px;
+}
+
+.ts-dot {
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gray);
+}
+
+.ts-label {
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.ts-detail {
+  color: var(--gray);
+  font-size: 12.5px;
+}
+
+.turn-status.t-green {
+  border-left-color: var(--green);
+}
+.turn-status.t-green .ts-dot {
+  background: var(--green);
+}
+.turn-status.t-amber {
+  border-left-color: var(--amber);
+}
+.turn-status.t-amber .ts-dot {
+  background: var(--amber);
+}
+.turn-status.t-red {
+  border-left-color: var(--red);
+}
+.turn-status.t-red .ts-dot {
+  background: var(--red);
+}
+.turn-status.t-purple {
+  border-left-color: var(--purple);
+}
+.turn-status.t-purple .ts-dot {
+  background: var(--purple);
+}
+.turn-status.t-purple .ts-label {
+  color: var(--purple);
 }
 
 .attach-note {

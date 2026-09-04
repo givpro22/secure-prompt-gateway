@@ -11,6 +11,8 @@ import LlmMark from './LlmMark.vue'
 const props = defineProps({
   options: { type: Array, required: true },
   modelValue: { type: String, required: true },
+  /** 재전송이 막힌 동안에는 고를 것도 없다 */
+  disabled: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -49,6 +51,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       class="trigger"
+      :disabled="disabled"
       :aria-expanded="open"
       aria-haspopup="listbox"
       @click="open = !open"
@@ -90,6 +93,11 @@ onBeforeUnmount(() => {
   font: inherit;
   font-size: 12.5px;
   color: var(--navy);
+}
+
+.trigger:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .trigger {

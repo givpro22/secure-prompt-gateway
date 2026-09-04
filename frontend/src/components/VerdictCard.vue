@@ -48,7 +48,7 @@ const props = defineProps({
   answerAsked: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['answered', 'asking'])
+const emit = defineEmits(['answered', 'asking', 'unmask-requested'])
 
 const matches = computed(() => {
   const value = props.verdict.ruleResult?.matches
@@ -186,6 +186,8 @@ async function sendToSelected() {
   const text = approvedText.value
   const target = EXTERNAL_LLMS.find((l) => l.id === targetId.value)
   if (!text || !target) return
+  // 버튼을 가리는 것만으로는 부족하다. 실제로 나가는 자리에서도 막는다.
+  if (egressLocked.value) return
 
   const ok = await copyApproved(text)
   copied.value = ok
@@ -278,6 +280,31 @@ async function checkAnswer() {
 }
 
 const answerMatches = computed(() => answerVerdict.value?.ruleResult?.matches ?? [])
+
+/*
+ * 답변이 유출 의심으로 걸린 동안에는 외부로 다시 못 내보낸다.
+ *
+ * 프롬프트 자체는 승인돼 이미 나갔지만, 그 본문을 모델이 그대로 되돌려줘서 지금 담당자가
+ * 보고 있는 중이다. 그 상태에서 같은 본문을 다른 서비스로 또 보내면 확인하려던 노출이
+ * 한 번 더 일어난다. 화면이 "확인이 필요합니다"라고 말하면서 옆에 살아 있는 전송 버튼을
+ * 두면 그 경고가 무의미해진다.
+ *
+ * 확정된 뒤에는 결과에 따른다 — 차단으로 확정됐으면 계속 막고, 문제없음이면 푼다.
+ */
+const egressLocked = computed(() => {
+  const a = answerVerdict.value
+  if (!a) return false
+  const settled = a.settled?.status
+  if (settled) return settled === 'BLOCKED'
+  return a.decision === 'PENDING' || a.decision === 'BLOCK'
+})
+
+const egressLockReason = computed(() => {
+  const settled = answerVerdict.value?.settled?.status
+  if (settled === 'BLOCKED') return '받은 답변이 원문 유출로 확정되어 재전송이 막혔습니다.'
+  if (answerVerdict.value?.decision === 'BLOCK') return '받은 답변이 차단되었습니다. 확인 후 다시 시도하세요.'
+  return '받은 답변을 담당자가 확인하는 중입니다. 확정 전까지 재전송할 수 없습니다.'
+})
 /** 담당자가 답변을 확정했으면 그 결과. 검토 대기로 남아 있으면 null */
 const answerSettled = computed(() => answerVerdict.value?.settled ?? null)
 
@@ -385,12 +412,45 @@ const canAskUnmask = computed(
 )
 
 const reasonBox = ref(null)
+const askBox = ref(null)
+
+/**
+ * 펼쳐진 칸을 화면 안으로 가져온다.
+ *
+ * 부드럽게 굴리되 **결과를 확인하고 안 됐으면 그냥 옮긴다.** smooth 스크롤은 브라우저가
+ * 프레임마다 움직이는 것이라, 탭이 숨겨지거나 렌더가 밀리면 한 걸음도 못 가고 끝난다.
+ * 그러면 버튼을 눌러도 아무 일이 없는 것처럼 보인다 — 이 함수가 막으려는 것이 그것이다.
+ */
+function revealAsk() {
+  const box = askBox.value
+  if (!box) return
+
+  const inView = () => {
+    const r = box.getBoundingClientRect()
+    return r.top >= 0 && r.bottom <= (window.innerHeight || 0)
+  }
+
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  reasonBox.value?.focus({ preventScroll: true })
+
+  // 부드러운 이동이 끝났을 무렵 확인한다. 안 갔으면 한 번에 옮긴다.
+  setTimeout(() => {
+    if (!inView()) box.scrollIntoView({ block: 'center' })
+  }, 400)
+}
 
 async function openAsk() {
   asking.value = true
-  // 펼쳐진 뒤 입력란으로 커서를 옮긴다. 한 번 더 클릭하게 만들 이유가 없다.
+  /*
+   * 펼쳐진 자리로 화면을 옮긴다. 카드가 길면 버튼을 눌러도 펼쳐진 칸이 화면 밖에 있어
+   * 아무 일도 일어나지 않은 것처럼 보인다.
+   *
+   * 펼침 전환이 0.26초라 끝나기 전에 굴리면 최종 높이를 모르고 어중간한 데서 멈춘다.
+   * 전환이 끝난 뒤 굴리고, 그다음 커서를 옮긴다 — 순서를 바꾸면 focus가 먼저 튀어
+   * 부드러운 스크롤이 끊긴다.
+   */
   await nextTick()
-  reasonBox.value?.focus()
+  revealAsk()
   requestError.value = ''
   if (reason.value.length === 0 && hasRosterHit.value) {
     reason.value = '사내 직원 이름입니다. 고객 명단과 이름만 같습니다.'
@@ -412,6 +472,8 @@ async function submitAsk() {
      * 키를 종과 똑같이 맞춘다 — 어긋나면 같은 요청이 두 줄로 뜬다. 확정이 나면 종이
      * 이 줄의 잠금을 풀고 그 아래 결과를 붙인다 (D25).
      */
+    // 대화에도 올린다. 카드는 세션을 옮기면 다시 만들어져 이 사실을 기억하지 못한다.
+    emit('unmask-requested', requested.value)
     const label = shortTitle(props.originalText)
     notifications.pushOnce(session.currentUserId, `asked:${requested.value.requestId}`, {
       pending: true,
@@ -627,11 +689,18 @@ const summary = computed(() => {
         >
           검토 요청
         </button>
-        <LlmPicker v-model="targetId" :options="EXTERNAL_LLMS" />
-        <button type="button" class="egress-btn" @click="sendToSelected">
+        <LlmPicker v-model="targetId" :options="EXTERNAL_LLMS" :disabled="egressLocked" />
+        <button
+          type="button"
+          class="egress-btn"
+          :disabled="egressLocked"
+          :title="egressLocked ? egressLockReason : ''"
+          @click="sendToSelected"
+        >
           {{ selectedLlm?.prefill ? '바로 전송' : '복사 후 열기' }}
         </button>
       </span>
+      <p v-if="egressLocked" class="egress-lock">{{ egressLockReason }}</p>
     </div>
 
     <!--
@@ -640,33 +709,31 @@ const summary = computed(() => {
       **누른 버튼 바로 아래에서 열린다.** 예전에는 카드 위쪽에 있어서, 아래 버튼을 눌렀는데
       화면 위에서 무언가 열렸다 — 누른 자리와 열리는 자리가 멀면 무엇이 일어났는지 모른다.
     -->
-    <Transition name="unmask-open">
-      <div v-if="asking" class="unmask">
-        <form class="unmask-form" @submit.prevent="submitAsk">
-          <label class="unmask-label" for="unmask-reason">
-            왜 가리지 않아도 되는지 적어 주세요. 보안 담당자가 원문과 함께 봅니다.
-          </label>
-          <textarea
-            id="unmask-reason"
-            ref="reasonBox"
-            v-model="reason"
-            rows="2"
-            maxlength="500"
-            :disabled="submitting"
-            placeholder="예) 사내 직원 이름입니다. 고객 명단과 이름만 같습니다."
-          />
-          <div class="unmask-actions">
-            <button type="button" class="unmask-cancel" :disabled="submitting" @click="asking = false">
-              취소
-            </button>
-            <button type="submit" class="unmask-send" :disabled="submitting || reason.trim().length === 0">
-              {{ submitting ? '보내는 중…' : '요청 보내기' }}
-            </button>
-          </div>
-          <p v-if="requestError" class="unmask-error">{{ requestError }}</p>
-        </form>
-      </div>
-    </Transition>
+    <div v-if="asking" ref="askBox" class="unmask">
+      <form class="unmask-form" @submit.prevent="submitAsk">
+        <label class="unmask-label" for="unmask-reason">
+          왜 가리지 않아도 되는지 적어 주세요. 보안 담당자가 원문과 함께 봅니다.
+        </label>
+        <textarea
+          id="unmask-reason"
+          ref="reasonBox"
+          v-model="reason"
+          rows="2"
+          maxlength="500"
+          :disabled="submitting"
+          placeholder="예) 사내 직원 이름입니다. 고객 명단과 이름만 같습니다."
+        />
+        <div class="unmask-actions">
+          <button type="button" class="unmask-cancel" :disabled="submitting" @click="asking = false">
+            취소
+          </button>
+          <button type="submit" class="unmask-send" :disabled="submitting || reason.trim().length === 0">
+            {{ submitting ? '보내는 중…' : '요청 보내기' }}
+          </button>
+        </div>
+      <p v-if="requestError" class="unmask-error">{{ requestError }}</p>
+      </form>
+    </div>
   </section>
 </template>
 
@@ -963,41 +1030,29 @@ const summary = computed(() => {
   overflow: hidden;
 }
 
-.unmask-open-enter-active {
-  transition:
-    max-height 0.26s cubic-bezier(0.2, 0.9, 0.3, 1),
-    opacity 0.2s ease 0.04s,
-    margin-top 0.26s ease,
-    padding 0.26s ease;
+/*
+ * 펼칠 때 살짝 미끄러진다. **높이도 투명도도 건드리지 않는다.**
+ *
+ * 처음에는 max-height를 0에서 늘렸는데, 탭이 숨겨지면 애니메이션이 첫 프레임에서 멈추고
+ * 칸이 통째로 사라진다(높이 2px). Vue의 Transition도 같은 이유로 시작 클래스에 갇혔다.
+ * 연출이 멈췄을 때 기능까지 사라지면 안 되므로, 멈춰도 해가 없는 것만 움직인다 —
+ * 6px 밀린 채로 멈출 뿐 칸은 제 높이로 보인다.
+ *
+ * 눈에 띄게 하는 일은 스크롤이 맡는다. 그쪽이 확실하다.
+ */
+@keyframes unmask-open {
+  from {
+    transform: translateY(-6px);
+  }
 }
 
-.unmask-open-leave-active {
-  transition:
-    max-height 0.18s ease,
-    opacity 0.12s ease,
-    margin-top 0.18s ease,
-    padding 0.18s ease;
-}
-
-.unmask-open-enter-from,
-.unmask-open-leave-to {
-  max-height: 0;
-  margin-top: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-}
-
-.unmask-open-enter-to,
-.unmask-open-leave-from {
-  max-height: 260px;
-  opacity: 1;
+.unmask {
+  animation: unmask-open 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .unmask-open-enter-active,
-  .unmask-open-leave-active {
-    transition-duration: 0.01ms;
+  .unmask {
+    animation: none;
   }
 }
 .unmask-form {
@@ -1097,6 +1152,13 @@ const summary = computed(() => {
   padding-top: 10px;
   border-top: 1px solid var(--border);
   font-size: var(--font-caption);
+}
+
+.egress-lock {
+  flex-basis: 100%;
+  margin: 8px 0 0;
+  color: var(--purple);
+  font-size: 12.5px;
 }
 
 .egress-label {
