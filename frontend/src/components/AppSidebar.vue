@@ -304,18 +304,31 @@ function token(decision) {
         <svg viewBox="0 0 32 32" width="30" height="30">
           <defs>
             <linearGradient id="prism-mark" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#1e3a6e" />
-              <stop offset="45%" stop-color="#1f8fc9" />
-              <stop offset="100%" stop-color="#25b573" />
+              <stop offset="0%" stop-color="#2f5f9e" />
+              <stop offset="45%" stop-color="#2a9fd6" />
+              <stop offset="100%" stop-color="#2fc47f" />
             </linearGradient>
           </defs>
           <path
-            d="M16 3.4 27 9.7v12.6L16 28.6 5 22.3V9.7Z"
+            d="M16 2.6 28 9.5v13.8L16 30.2 4 23.3V9.5Z"
             fill="none"
             stroke="url(#prism-mark)"
-            stroke-width="3.4"
+            stroke-width="2.6"
             stroke-linejoin="round"
           />
+          <!--
+            자물쇠는 밝은 색으로 둔다. 로고의 남색 자물쇠를 그대로 쓰면 남색 사이드바에
+            묻혀 안 보인다. 고리는 선, 몸통은 면 — 30px에서 형태가 안 무너진다.
+          -->
+          <path
+            d="M13.4 15.6v-1.9a2.6 2.6 0 0 1 5.2 0v1.9"
+            fill="none"
+            stroke="var(--nav-fg)"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          />
+          <rect x="12" y="15.4" width="8" height="6.4" rx="1.3" fill="var(--nav-fg)" />
+          <rect x="15.35" y="17.6" width="1.3" height="2.4" rx="0.65" fill="var(--nav-bg)" />
         </svg>
       </span>
       <span class="name">
