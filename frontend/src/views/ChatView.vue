@@ -599,7 +599,7 @@ function isHumanDecided(entry) {
 .answer {
   margin: 10px 0 0;
   padding: 16px 18px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 12px;
   background: #fff;
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { fetchAnswerAvailable, requestAnswer, submitResponse } from '../api/messages'
 import { requestUnmask } from '../api/unmask'
 import { useNotificationStore } from '../stores/notifications'
@@ -384,8 +384,13 @@ const canAskUnmask = computed(
   () => isMask.value && props.verdict.messageId != null && unmaskState.value === null,
 )
 
-function openAsk() {
+const reasonBox = ref(null)
+
+async function openAsk() {
   asking.value = true
+  // 펼쳐진 뒤 입력란으로 커서를 옮긴다. 한 번 더 클릭하게 만들 이유가 없다.
+  await nextTick()
+  reasonBox.value?.focus()
   requestError.value = ''
   if (reason.value.length === 0 && hasRosterHit.value) {
     reason.value = '사내 직원 이름입니다. 고객 명단과 이름만 같습니다.'
@@ -481,32 +486,6 @@ const summary = computed(() => {
         고객 명단과 이름만 같은 직원이라면 검토를 요청할 수 있습니다.
       </template>
     </p>
-
-    <!-- 마스킹 해제 검토 요청 (D25). 사람이 원문과 마스킹본을 비교해 정한다 -->
-    <div v-if="asking" class="unmask">
-      <form class="unmask-form" @submit.prevent="submitAsk">
-        <label class="unmask-label" for="unmask-reason">
-          왜 가리지 않아도 되는지 적어 주세요. 보안 담당자가 원문과 함께 봅니다.
-        </label>
-        <textarea
-          id="unmask-reason"
-          v-model="reason"
-          rows="2"
-          maxlength="500"
-          :disabled="submitting"
-          placeholder="예) 사내 직원 이름입니다. 고객 명단과 이름만 같습니다."
-        />
-        <div class="unmask-actions">
-          <button type="button" class="unmask-cancel" :disabled="submitting" @click="asking = false">
-            취소
-          </button>
-          <button type="submit" class="unmask-send" :disabled="submitting || reason.trim().length === 0">
-            {{ submitting ? '보내는 중…' : '요청 보내기' }}
-          </button>
-        </div>
-        <p v-if="requestError" class="unmask-error">{{ requestError }}</p>
-      </form>
-    </div>
 
     <!--
       출력 검사 (UC-08). 받은 답변을 같은 정책으로 다시 본다.
@@ -654,6 +633,40 @@ const summary = computed(() => {
         </button>
       </span>
     </div>
+
+    <!--
+      마스킹 해제 검토 요청 (D25). 사람이 원문과 마스킹본을 비교해 정한다.
+
+      **누른 버튼 바로 아래에서 열린다.** 예전에는 카드 위쪽에 있어서, 아래 버튼을 눌렀는데
+      화면 위에서 무언가 열렸다 — 누른 자리와 열리는 자리가 멀면 무엇이 일어났는지 모른다.
+    -->
+    <Transition name="unmask-open">
+      <div v-if="asking" class="unmask">
+        <form class="unmask-form" @submit.prevent="submitAsk">
+          <label class="unmask-label" for="unmask-reason">
+            왜 가리지 않아도 되는지 적어 주세요. 보안 담당자가 원문과 함께 봅니다.
+          </label>
+          <textarea
+            id="unmask-reason"
+            ref="reasonBox"
+            v-model="reason"
+            rows="2"
+            maxlength="500"
+            :disabled="submitting"
+            placeholder="예) 사내 직원 이름입니다. 고객 명단과 이름만 같습니다."
+          />
+          <div class="unmask-actions">
+            <button type="button" class="unmask-cancel" :disabled="submitting" @click="asking = false">
+              취소
+            </button>
+            <button type="submit" class="unmask-send" :disabled="submitting || reason.trim().length === 0">
+              {{ submitting ? '보내는 중…' : '요청 보내기' }}
+            </button>
+          </div>
+          <p v-if="requestError" class="unmask-error">{{ requestError }}</p>
+        </form>
+      </div>
+    </Transition>
   </section>
 </template>
 
@@ -811,7 +824,7 @@ const summary = computed(() => {
   gap: 8px;
   margin-top: 12px;
   padding: 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: #fff;
 }
@@ -822,7 +835,7 @@ const summary = computed(() => {
 .answer-check textarea {
   resize: vertical;
   padding: 9px 11px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
   font-size: 14px;
@@ -838,22 +851,37 @@ const summary = computed(() => {
 .answer-result {
   margin-top: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: 10px;
   background: #fff;
 }
 .answer-result.t-block {
-  border-left-color: #c5372c;
+  border-left-color: var(--red);
 }
 .answer-result.t-mask {
-  border-left-color: #c08a2e;
+  border-left-color: var(--amber);
 }
 .answer-result.t-allow {
-  border-left-color: #2f7d54;
+  border-left-color: var(--green);
 }
+
+/*
+ * 검토 대기만 따로 세운다.
+ *
+ * 프롬프트가 마스킹(주황)이라 카드 왼쪽이 온통 주황인데, 답변이 검토로 넘어간 것은
+ * 3px 선 하나로는 안 읽힌다. 화면이 "가려서 보냈다"에서 멈춘 것처럼 보이는데
+ * 실제로는 사람의 확정을 기다리는 중이다 — 상태가 바뀌었으면 색도 바뀌어야 한다.
+ */
 .answer-result.t-pending {
-  border-left-color: #6b74d6;
+  border-color: var(--purple);
+  border-left-width: 4px;
+  background: #f6f4fb;
+}
+
+.answer-result.t-pending .answer-note {
+  color: var(--purple);
+  font-weight: 600;
 }
 .answer-head {
   display: flex;
@@ -899,7 +927,7 @@ const summary = computed(() => {
 }
 .answer-detail-toggle {
   margin-top: 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 10px;
   background: #fff;
@@ -911,7 +939,7 @@ const summary = computed(() => {
   margin: 10px 0 0;
   padding: 11px 13px;
   border-radius: 8px;
-  background: var(--bg-soft, #f6f7f9);
+  background: var(--card);
   font-size: 14px;
   line-height: 1.8;
   color: var(--navy);
@@ -919,15 +947,65 @@ const summary = computed(() => {
 }
 
 /* 마스킹 해제 검토 요청 (D25) */
+/*
+ * 버튼 바로 아래에서 펼쳐진다.
+ *
+ * 높이를 애니메이션하려면 끝값이 필요한데 내용 높이는 미리 모른다. max-height로
+ * 넉넉히 잡고 미끄러뜨린다 — 여는 곡선을 나가는 것보다 길게 둬서 열릴 때는
+ * 부드럽고 닫힐 때는 군말이 없다.
+ */
 .unmask {
   margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.unmask-open-enter-active {
+  transition:
+    max-height 0.26s cubic-bezier(0.2, 0.9, 0.3, 1),
+    opacity 0.2s ease 0.04s,
+    margin-top 0.26s ease,
+    padding 0.26s ease;
+}
+
+.unmask-open-leave-active {
+  transition:
+    max-height 0.18s ease,
+    opacity 0.12s ease,
+    margin-top 0.18s ease,
+    padding 0.18s ease;
+}
+
+.unmask-open-enter-from,
+.unmask-open-leave-to {
+  max-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+
+.unmask-open-enter-to,
+.unmask-open-leave-from {
+  max-height: 260px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unmask-open-enter-active,
+  .unmask-open-leave-active {
+    transition-duration: 0.01ms;
+  }
 }
 .unmask-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: #fff;
 }
@@ -938,7 +1016,7 @@ const summary = computed(() => {
 .unmask-form textarea {
   resize: vertical;
   padding: 9px 11px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
   font-size: 14px;
@@ -958,7 +1036,7 @@ const summary = computed(() => {
   cursor: pointer;
 }
 .unmask-cancel {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   background: #fff;
   color: var(--gray);
 }

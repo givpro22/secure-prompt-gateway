@@ -147,7 +147,7 @@ defineExpose({ load })
 .queue {
   margin-bottom: 22px;
   padding: 20px 22px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 14px;
   background: #fff;
 }
@@ -168,7 +168,7 @@ defineExpose({ load })
 }
 .reload {
   margin-left: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 5px 11px;
   background: #fff;
@@ -199,11 +199,26 @@ defineExpose({ load })
   font-size: 13px;
 }
 
+/*
+ * 요청 하나가 카드 하나다.
+ *
+ * 전에는 테두리 색으로 정의된 적 없는 토큰을 써서 축약형 선언이 통째로 무효가 됐고,
+ * 테두리가 아예 안 그려졌다. 요청이 여럿일 때 어디까지가 한 건인지 읽히지 않았다.
+ *
+ * 왼쪽에 보라색 띠를 둔다 — 이 대기열의 모든 항목이 '검토 대기' 상태이고,
+ * 화면 다른 곳에서 그 상태를 보라색으로 쓴다.
+ */
 .item {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid var(--line);
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--purple);
   border-radius: 12px;
+  background: #fff;
+}
+
+.item + .item {
+  margin-top: 18px;
 }
 .item-head {
   display: flex;
@@ -240,10 +255,12 @@ defineExpose({ load })
     grid-template-columns: 1fr;
   }
 }
+/* 원문과 전송본은 나란히 두고 배경으로 카드와 구분한다 */
 .side {
   padding: 12px 14px;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg-soft, #f6f7f9);
+  background: var(--card);
 }
 .side-label {
   display: block;
@@ -272,7 +289,7 @@ defineExpose({ load })
   flex: 1;
   min-width: 0;
   padding: 7px 11px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
   font-size: 13px;
@@ -287,7 +304,7 @@ defineExpose({ load })
   white-space: nowrap;
 }
 .keep {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   background: #fff;
   color: var(--gray);
 }
@@ -323,7 +340,7 @@ defineExpose({ load })
   align-items: baseline;
   gap: 10px;
   padding: 7px 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border);
   font-size: 13px;
 }
 .tag {
